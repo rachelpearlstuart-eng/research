@@ -302,6 +302,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.1/dist/fabric.min.js"></script>
     <script src="https://unpkg.com/pdfannotate@1.0.1/dist/pdfannotate.js"></script>
+    <script src="audio-map.js"></script>
 </head>
 <body>
 
@@ -382,7 +383,6 @@
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    const supportedAudioExts = ['.mp3', '.mp4', '.flac', '.ogg'];
     const DEFAULT_ZOOM_PERCENT = 200;
     const DEFAULT_QUALITY_SCALE = 4.0;
 
@@ -452,14 +452,12 @@
                 files.forEach(f => {
                     const baseName = f.name.replace(/\.[^/.]+$/, '');
                     if (!filesMap.has(baseName)) {
-                        filesMap.set(baseName, { pdf: null, png: null, audio: null });
+                        filesMap.set(baseName, { pdf: null, png: null });
                     }
                     if (f.name.endsWith('.pdf')) {
                         filesMap.get(baseName).pdf = f;
                     } else if (f.name.endsWith('.png')) {
                         filesMap.get(baseName).png = f;
-                    } else if (supportedAudioExts.some(ext => f.name.endsWith(ext))) {
-                        filesMap.get(baseName).audio = f;
                     }
                 });
 
@@ -476,6 +474,9 @@
                             displayType = 'pdf';
                             displayUrl = item.pdf.download_url;
                         }
+
+                        // Look up audio URL from the new mapping file
+                        const audioUrl = audioMap[baseName] || null;
                         
                         displayItems.push({
                             name: baseName,
@@ -484,7 +485,7 @@
                             initialQuality: quality,
                             initialZoom: zoom,
                             thumbnailUrl: item.png.download_url,
-                            audioUrl: item.audio ? item.audio.download_url : null
+                            audioUrl: audioUrl
                         });
                     }
                 });
