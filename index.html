@@ -128,7 +128,7 @@
             height: 100%;
         }
         
-        /* Top Controls (x, Zoom, Annotations, Audio) */
+        /* Top Controls (x, Zoom, Audio) */
         .top-controls {
             position: fixed;
             top: 20px;
@@ -167,7 +167,7 @@
             font-size: 20px;
             font-weight: 100;
         }
-        .zoom-controls, .annotation-controls {
+        .zoom-controls {
             display: flex;
             align-items: center;
             gap: 10px;
@@ -189,6 +189,27 @@
         .control-button:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
+        
+        /* Annotation Controls (moved to bottom left) */
+        .annotation-controls {
+            position: fixed;
+            bottom: 60px;
+            left: 20px;
+            z-index: 1001;
+            display: none; /* Hide by default */
+            align-items: center;
+            gap: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 20px;
+            color: white;
+            transition: opacity 0.5s ease-in-out;
+            opacity: 0;
+        }
+        .annotation-controls.visible {
+            display: flex;
+            opacity: 1;
+        }
         .annotation-controls .control-button {
             font-size: 16px;
         }
@@ -200,7 +221,7 @@
         /* Audio Player */
         .audio-player-container {
             display: none;
-            width: 100%; /* Keep it wide */
+            width: 100%;
             max-width: 600px;
             background-color: rgba(0, 0, 0, 0.7);
             padding: 10px 15px;
@@ -271,8 +292,7 @@
     </style>
     <script src="https://unpkg.com/@yermolim/ts-pdf@0.6.9/es5/build/pdf.js"></script>
     <script src="https://unpkg.com/@yermolim/ts-pdf@0.6.9/es5/build/ts-pdf-viewer.js"></script>
-    
-    </head>
+</head>
 <body>
 
 <div id="grid-container" class="grid-container">
@@ -291,11 +311,6 @@
                 <span id="zoomLevel">100%</span>
                 <button id="zoomInBtn" class="control-button">+</button>
             </div>
-            <div class="annotation-controls">
-                <button id="highlightBtn" class="control-button" title="Highlight">H</button>
-                <button id="strikeoutBtn" class="control-button" title="Strikeout">S</button>
-                <button id="underlineBtn" class="control-button" title="Underline">U</button>
-            </div>
             <div class="close-button" onclick="closePdfModal()">
                 <span class="close">x</span>
             </div>
@@ -310,6 +325,12 @@
                 <span id="time-display" class="time-display">0:00 / 0:00</span>
             </div>
         </div>
+    </div>
+    
+    <div id="annotationControls" class="annotation-controls">
+        <button id="highlightBtn" class="control-button" title="Highlight">H</button>
+        <button id="strikeoutBtn" class="control-button" title="Strikeout">S</button>
+        <button id="underlineBtn" class="control-button" title="Underline">U</button>
     </div>
     
     <div id="pdf-viewer-container" class="modal-content">
@@ -331,6 +352,7 @@
     const rpsText = document.querySelector('.rps-text');
     const contactLink = document.querySelector('.contact-link');
 
+    const annotationControls = document.getElementById('annotationControls');
     const highlightBtn = document.getElementById('highlightBtn');
     const strikeoutBtn = document.getElementById('strikeoutBtn');
     const underlineBtn = document.getElementById('underlineBtn');
@@ -346,6 +368,9 @@
     let tsPdfViewerInstance = null;
     let controlsTimeout;
     const supportedAudioExts = ['.mp3', '.mp4', '.flac', '.ogg'];
+    const externalAudioMap = {
+        'Hejinian_Lyn_naropa_95': 'https://server16621.contentdm.oclc.org/dmwebservices/index.php?q=dmGetStreamingFile/p16621coll1/1632.mp3/byte/json',
+    };
 
     function resetAudioPlayer() {
         audioPlayer.pause();
@@ -388,13 +413,16 @@
                 pngs.forEach(png => {
                     const pngNameBase = png.name.replace('.png', '');
                     const pdf = pdfsMap.get(pngNameBase);
-                    let audio = audioMap.get(pngNameBase);
-
-                    if (!audio) {
+                    let audioUrl = externalAudioMap[pngNameBase] || (audioMap.get(pngNameBase) ? audioMap.get(pngNameBase).download_url : null);
+                    
+                    if (!audioUrl) {
                         const numMatch = pngNameBase.match(/^\d+/);
                         if (numMatch) {
                             const numPrefix = numMatch[0];
-                            audio = audioFiles.find(a => a.name.startsWith(numPrefix));
+                            const internalAudioFallback = audioFiles.find(a => a.name.startsWith(numPrefix));
+                            if (internalAudioFallback) {
+                                audioUrl = internalAudioFallback.download_url;
+                            }
                         }
                     }
 
@@ -404,7 +432,7 @@
                             type: 'pdf',
                             url: pdf.download_url,
                             thumbnailUrl: png.download_url,
-                            audioUrl: audio ? audio.download_url : null
+                            audioUrl: audioUrl
                         });
                     }
                 });
@@ -419,7 +447,7 @@
                 });
 
                 if (displayItems.length === 0) {
-                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PDF or audio file has a matching PNG thumbnail.</p>';
+                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PNG thumbnail has a matching PDF or a corresponding audio link.</p>';
                     return;
                 }
                 
@@ -441,6 +469,7 @@
     async function openViewer(fileUrl, audioUrl) {
         modal.classList.add('show');
         topControls.classList.add('top-controls-visible');
+        annotationControls.classList.add('visible');
         
         setupAudioPlayer(audioUrl);
         
@@ -458,16 +487,16 @@
         };
         
         tsPdfViewerInstance = new TsPdfViewer(options);
-        await tsPdfViewerInstance.openPdfAsync(fileUrl);
         
-        zoomLevelSpan.textContent = `${Math.round(tsPdfViewerInstance.getScale() * 100)}%`;
+        // Listen for when the PDF is opened to update the zoom level
+        tsPdfViewerInstance.on(TsPdfViewer.Events.DOCUMENT_LOADED, () => {
+             zoomLevelSpan.textContent = `${Math.round(tsPdfViewerInstance.getScale() * 100)}%`;
+        });
+        
+        await tsPdfViewerInstance.openPdfAsync(fileUrl);
         
         // Expose instance for button handlers
         window.tsPdfViewerInstance = tsPdfViewerInstance;
-        
-        // Hide/show annotation tools based on file type (only for PDF)
-        const annotationControls = document.querySelector('.annotation-controls');
-        annotationControls.style.display = 'flex';
     }
 
     function closePdfModal() {
@@ -476,6 +505,7 @@
         currentDocumentUrl = null;
         tsPdfViewerInstance = null;
         resetAudioPlayer();
+        annotationControls.classList.remove('visible');
     }
     
     // Zoom Buttons
@@ -504,9 +534,9 @@
         }
     }
     
-    highlightBtn.onclick = () => setActiveTool('TEXT_HIGHLIGHT');
-    strikeoutBtn.onclick = () => setActiveTool('STRIKEOUT');
-    underlineBtn.onclick = () => setActiveTool('TEXT_UNDERLINE');
+    highlightBtn.onclick = () => setActiveTool(TsPdfViewer.ToolMode.TEXT_HIGHLIGHT);
+    strikeoutBtn.onclick = () => setActiveTool(TsPdfViewer.ToolMode.STRIKEOUT);
+    underlineBtn.onclick = () => setActiveTool(TsPdfViewer.ToolMode.TEXT_UNDERLINE);
 
     modal.onmousemove = () => {
         topControls.classList.add('top-controls-visible');
