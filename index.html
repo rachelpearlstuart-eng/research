@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Research Collection</title>
+    <title>Poetry Collection</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>
         /* Base Styles */
@@ -278,7 +278,7 @@
             </div>
         </div>
         <div id="audio-player-container" class="audio-player-container">
-            <audio id="audio-player" preload="metadata"></audio>
+            <audio id="audio-player" preload="metadata" crossorigin="anonymous"></audio>
             <div class="audio-controls">
                 <button id="play-pause-btn" class="play-pause-btn">▶</button>
                 <div id="progress-bar" class="progress-bar">
@@ -294,7 +294,7 @@
 
 <script>
     const repoOwner = 'rachelpearlstuart-eng';
-    const repoName = 'research';
+    const repoName = 'poetry';
     const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents`;
 
     const gridContainer = document.getElementById('grid-container');
@@ -651,6 +651,7 @@
             }
         } catch (error) {
             console.error('Playback failed. Error:', error);
+            alert('Playback failed. This may be due to browser security settings or a cross-origin issue. Check the browser console for more details.');
         }
     });
 
