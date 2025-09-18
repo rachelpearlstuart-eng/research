@@ -408,7 +408,7 @@
         'four': 4.0, 'five': 5.0, 'six': 6.0, 'seven': 7.0, 'eight': 8.0
     };
     const externalAudioMap = {
-        'Hejinian_Lyn_naropa_95': 'https://server16621.contentdm.oclc.org/dmwebservices/index.php?q=dmGetStreamingFile/p16621coll1/1632.mp3/byte/json',
+        'Hejinian_Lyn_naropa_95': 'https://archive.org/download/lyn-hejinian-and-tom-raworth-3-3-1999-1001/Lyn_Hejinian_and_Tom_Raworth_3-3-1999_%231001.mp3',
     };
 
     function resetAudioPlayer() {
@@ -775,9 +775,9 @@
                 audioPlayer.pause();
             }
         } catch (error) {
-            console.error('Playback failed. Error:', error);
-        }
-    });
+                console.error('Playback failed. Error:', error);
+            }
+        });
 
     audioPlayer.addEventListener('play', () => {
         playPauseBtn.textContent = '⏸';
@@ -937,7 +937,7 @@
             });
         }
     }
-
+    
     if (__firebase_config) {
         const app = initializeApp(__firebase_config, __app_id);
         auth = getAuth(app);
