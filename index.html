@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Research Collection</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdf-annotate.js/dist/pdf-annotate.css">
     <style>
         /* Base Styles */
         body {
@@ -74,9 +75,12 @@
             padding-top: 50px;
             position: relative;
         }
+        .pdf-page-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
         .pdf-canvas {
             border: 1px solid #ccc;
-            margin-bottom: 20px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
         }
         .image-viewer {
@@ -175,6 +179,13 @@
             display: none;
         }
 
+        .controls {
+            display: flex;
+            align-items: center;
+            color: white;
+            font-family: monospace;
+        }
+
         #play-pause-btn {
             background-color: #fff;
             border: none;
@@ -189,13 +200,6 @@
 
         #play-pause-btn:hover {
             background-color: #f0f0f0;
-        }
-
-        .controls {
-            display: flex;
-            align-items: center;
-            color: white;
-            font-family: monospace;
         }
 
         #progress-bar {
@@ -214,6 +218,58 @@
             border-radius: 4px;
             transition: width 0.1s linear;
         }
+
+        /* Annotation Toolbar Styles */
+        #annotation-toolbar {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            z-index: 1003;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .tool-button {
+            background-color: transparent;
+            border: 2px solid transparent;
+            color: white;
+            padding: 8px;
+            font-size: 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .tool-button:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .tool-button.active {
+            border: 2px solid white;
+        }
+        
+        #annotation-toolbar .color-picker {
+            width: 30px;
+            height: 30px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            padding: 0;
+            margin: 0;
+        }
+        #save-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 8px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -227,7 +283,7 @@
         </div>
 
     <div id="pdfModal">
-        <span class="close" onclick="closePdfModal()">&times;</span>
+        <span class="close" onclick="closeViewer()">&times;</span>
         <div id="topControls" class="top-controls">
             <div id="zoomControls">
                 <button id="zoomOutBtn">-</button>
@@ -236,6 +292,14 @@
             </div>
         </div>
         <div id="pdf-viewer-container"></div>
+    </div>
+
+    <div id="annotation-toolbar">
+        <button id="tool-text" class="tool-button" title="Add Text">T</button>
+        <button id="tool-draw" class="tool-button" title="Draw"><span style="font-size: 24px;">✎</span></button>
+        <button id="tool-highlight" class="tool-button" title="Highlight"><span style="font-size: 24px;">🖍</span></button>
+        <input type="color" id="annotation-color" class="color-picker" value="#ff0000" title="Annotation Color">
+        <button id="save-btn" title="Save PDF with Annotations">Save</button>
     </div>
 
     <div id="audio-player-container">
@@ -250,6 +314,8 @@
     </div>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-annotate.js/dist/pdf-annotate.min.js"></script>
     <script src="audio-map.js"></script>
     <script>
         const repoOwner = 'rachelpearlstuart-eng';
@@ -266,6 +332,14 @@
         const rpsText = document.querySelector('.rps-text');
         const contactLink = document.querySelector('.contact-link');
 
+        const annotationToolbar = document.getElementById('annotation-toolbar');
+        const toolButtons = document.querySelectorAll('.tool-button');
+        const toolTextBtn = document.getElementById('tool-text');
+        const toolDrawBtn = document.getElementById('tool-draw');
+        const toolHighlightBtn = document.getElementById('tool-highlight');
+        const annotationColorPicker = document.getElementById('annotation-color');
+        const saveBtn = document.getElementById('save-btn');
+
         const audioPlayerContainer = document.getElementById('audio-player-container');
         const audioPlayer = document.getElementById('audio-player');
         const playPauseBtn = document.getElementById('play-pause-btn');
@@ -273,11 +347,12 @@
         const progressBarFill = document.getElementById('progress-bar-fill');
         const timeDisplay = document.getElementById('time-display');
 
-        let scale = 3.0;
+        let scale = 1.0;
         let currentDocument = null;
         let controlsTimeout;
         let currentViewerType = null;
         let currentDocumentUrl = null;
+        let PDFAnnotateInstance = null;
         let isRendering = false;
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
@@ -285,11 +360,7 @@
         const supportedAudioExts = ['.mp3', '.mp4', '.flac', '.ogg'];
 
         const scaleMap = {
-            'four': 4.0,
-            'five': 5.0,
-            'six': 6.0,
-            'seven': 7.0,
-            'eight': 8.0,
+            'four': 4.0, 'five': 5.0, 'six': 6.0, 'seven': 7.0, 'eight': 8.0,
         };
 
         function resetAudioPlayer() {
@@ -305,22 +376,12 @@
         function setupAudioPlayer(audioUrl) {
             resetAudioPlayer();
             if (audioUrl) {
-                console.log(`Setting audio source to: ${audioUrl}`);
                 audioPlayer.src = audioUrl;
                 audioPlayerContainer.classList.add('visible');
-
                 audioPlayer.addEventListener('loadedmetadata', () => {
-                    console.log('Audio metadata loaded. Duration:', audioPlayer.duration);
                     timeDisplay.textContent = `0:00 / ${formatTime(audioPlayer.duration)}`;
                 }, { once: true });
-
-                audioPlayer.addEventListener('error', (e) => {
-                    console.error('Audio loading error:', e);
-                });
-
                 audioPlayer.load();
-            } else {
-                console.log('No audio URL provided for this item.');
             }
         }
 
@@ -344,7 +405,6 @@
                         const pngNameBase = png.name.replace('.png', '');
                         const pdf = pdfsMap.get(pngNameBase);
                         
-                        // Get audio URL from new external map first, then fall back to internal
                         let audioUrl = externalAudioMap[pngNameBase];
                         if (!audioUrl) {
                             const internalAudio = internalAudioMap.get(pngNameBase);
@@ -363,7 +423,7 @@
                         }
 
                         if (pdf) {
-                            let customScale = 4.0;
+                            let customScale = 1.0;
                             const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
                             if (numericMatch) {
                                 customScale = parseInt(numericMatch[1]) / 100;
@@ -424,70 +484,41 @@
                 });
         }
 
-        async function renderPdf(pdf, container, scale) {
-            if (isRendering) return;
-            isRendering = true;
-            container.innerHTML = '';
-            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                const page = await pdf.getPage(pageNum);
-                const viewport = page.getViewport({ scale });
-                const canvas = document.createElement('canvas');
-                canvas.className = 'pdf-canvas';
-                const canvasContext = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                container.appendChild(canvas);
-                const renderContext = { canvasContext, viewport };
-                await page.render(renderContext).promise;
-            }
-            isRendering = false;
-        }
+        async function openViewer(fileUrl, initialScale, audioUrl, fileType) {
+            modal.classList.add('show');
+            topControls.classList.add('top-controls-visible');
+            annotationToolbar.style.display = fileType === 'pdf' ? 'flex' : 'none';
+            setupAudioPlayer(audioUrl);
+            scale = initialScale;
+            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+            currentViewerType = fileType;
+            currentDocumentUrl = fileUrl;
+            pdfViewerContainer.innerHTML = '<p style="color:white; text-align:center;">Loading...</p>';
 
-        async function reRenderPdf(pdf, container, newScale, oldScale) {
-            if (isRendering) return;
-            isRendering = true;
-
-            const oldScrollTop = container.scrollTop;
-            const pageCanvases = container.querySelectorAll('.pdf-canvas');
-
-            let currentPageIndex = 0;
-            let offsetInPage = 0;
-
-            for (let i = 0; i < pageCanvases.length; i++) {
-                const canvas = pageCanvases[i];
-
-                if (canvas.offsetTop <= oldScrollTop + 1) {
-                    currentPageIndex = i;
-                    offsetInPage = oldScrollTop - canvas.offsetTop;
-                } else {
-                    break;
+            if (fileType === 'pdf') {
+                try {
+                    const loadingTask = pdfjsLib.getDocument(fileUrl);
+                    currentDocument = await loadingTask.promise;
+                    pdfViewerContainer.innerHTML = '';
+                    PDFAnnotateInstance = new PDFAnnotate('pdf-viewer-container', fileUrl, {
+                        onPageRendered: () => {
+                            if (!isRendering) {
+                                isRendering = true;
+                                setScale(scale);
+                                isRendering = false;
+                            }
+                        },
+                        pdfDocument: currentDocument
+                    });
+                    setActiveTool('tool-text'); // Default tool
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    pdfViewerContainer.innerHTML = `<p style="color:white; text-align:center;">Failed to load PDF.</p>`;
                 }
+            } else if (fileType === 'image') {
+                currentDocument = fileUrl;
+                renderImage(currentDocument, pdfViewerContainer, scale);
             }
-
-            const renderPromises = [];
-            for (let i = 0; i < pdf.numPages; i++) {
-                const page = await pdf.getPage(i + 1);
-                const viewport = page.getViewport({ scale: newScale });
-                const canvas = pageCanvases[i];
-
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-
-                const renderContext = { canvasContext: canvas.getContext('2d'), viewport };
-                renderPromises.push(page.render(renderContext).promise);
-            }
-
-            await Promise.all(renderPromises);
-
-            const newCurrentPageCanvas = pageCanvases[currentPageIndex];
-            const newOffsetInPage = offsetInPage * (newScale / oldScale);
-
-            Promise.resolve().then(() => {
-                requestAnimationFrame(() => {
-                    container.scrollTop = newCurrentPageCanvas.offsetTop + newOffsetInPage;
-                    isRendering = false;
-                });
-            });
         }
 
         function renderImage(imageUrl, container, scale) {
@@ -500,66 +531,63 @@
             container.appendChild(image);
         }
 
-        async function openViewer(fileUrl, initialScale, audioUrl, fileType) {
-            modal.classList.add('show');
-            topControls.classList.add('top-controls-visible');
-
-            setupAudioPlayer(audioUrl);
-
-            scale = initialScale;
-            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-            currentViewerType = fileType;
-
-            pdfViewerContainer.innerHTML = '<p style="color:white; text-align:center;">Loading...</p>';
-
-            if (fileType === 'pdf') {
-                try {
-                    const loadingTask = pdfjsLib.getDocument(fileUrl);
-                    currentDocument = await loadingTask.promise;
-                    await renderPdf(currentDocument, pdfViewerContainer, scale);
-                } catch (error) {
-                    console.error('Error loading PDF:', error);
-                    pdfViewerContainer.innerHTML = `<p style="color:white; text-align:center;">Failed to load PDF.</p>`;
-                }
-            } else if (fileType === 'image') {
-                currentDocument = fileUrl;
-                renderImage(currentDocument, pdfViewerContainer, scale);
-            }
-        }
-
-        function closePdfModal() {
+        function closeViewer() {
             modal.classList.remove('show');
             pdfViewerContainer.innerHTML = '';
             currentDocument = null;
             currentViewerType = null;
+            PDFAnnotateInstance = null;
             resetAudioPlayer();
+            annotationToolbar.style.display = 'none';
         }
 
-        zoomInBtn.onclick = async () => {
-            if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
-                const oldScale = scale;
-                scale += 0.25;
-                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-                await reRenderPdf(currentDocument, pdfViewerContainer, scale, oldScale);
+        function setScale(newScale) {
+            if (PDFAnnotateInstance) {
+                PDFAnnotateInstance.setPage(1, newScale);
             } else if (currentDocument && currentViewerType === 'image') {
-                scale += 0.25;
-                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-                document.querySelector('.image-viewer').style.transform = `scale(${scale})`;
+                document.querySelector('.image-viewer').style.transform = `scale(${newScale})`;
+            }
+            scale = newScale;
+            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+        }
+
+        function setActiveTool(tool) {
+            toolButtons.forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tool).classList.add('active');
+            PDFAnnotateInstance.enableSelector(); // Disable other tools first
+            switch(tool) {
+                case 'tool-text': PDFAnnotateInstance.enableAddText(); break;
+                case 'tool-draw': PDFAnnotateInstance.enablePencil(); break;
+                case 'tool-highlight': PDFAnnotateInstance.enableRect('highlight'); break;
+                default: PDFAnnotateInstance.enableSelector(); break;
+            }
+        }
+
+        toolTextBtn.onclick = () => setActiveTool('tool-text');
+        toolDrawBtn.onclick = () => setActiveTool('tool-draw');
+        toolHighlightBtn.onclick = () => setActiveTool('tool-highlight');
+
+        annotationColorPicker.onchange = (e) => {
+            const color = e.target.value;
+            PDFAnnotateInstance.setStrokeColor(color);
+            PDFAnnotateInstance.setFillColor(color);
+        };
+
+        saveBtn.onclick = () => {
+            PDFAnnotateInstance.savePdf('annotated-document.pdf');
+        };
+
+        zoomInBtn.onclick = async () => {
+            if (currentDocument) {
+                const newScale = scale + 0.25;
+                setScale(newScale);
             }
         };
 
         zoomOutBtn.onclick = async () => {
-            if (scale > 0.25) {
-                if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
-                    const oldScale = scale;
-                    scale -= 0.25;
-                    zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-                    await reRenderPdf(currentDocument, pdfViewerContainer, scale, oldScale);
-                } else if (currentDocument && currentViewerType === 'image') {
-                    scale -= 0.25;
-                    zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-                    document.querySelector('.image-viewer').style.transform = `scale(${scale})`;
-                }
+            if (currentDocument && scale > 0.25) {
+                const newScale = scale - 0.25;
+                setScale(newScale);
             }
         };
 
@@ -573,7 +601,7 @@
 
         window.onclick = function(event) {
             if (event.target === modal) {
-                closePdfModal();
+                closeViewer();
             }
         };
 
@@ -582,23 +610,11 @@
         };
 
         playPauseBtn.addEventListener('click', async () => {
-            console.log('Play/Pause button clicked.');
-            if (!audioPlayer.src) {
-                console.error('Audio source is not set. Cannot play.');
-                return;
-            }
-
-            console.log('Current audio readyState:', audioPlayer.readyState);
-
             try {
                 if (audioPlayer.paused) {
-                    console.log("Attempting to play audio...");
                     await audioPlayer.play();
-                    console.log("Audio started playing successfully.");
                 } else {
-                    console.log("Attempting to pause audio...");
                     audioPlayer.pause();
-                    console.log("Audio paused.");
                 }
             } catch (error) {
                 console.error('Playback failed. Error:', error);
