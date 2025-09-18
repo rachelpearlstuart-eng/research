@@ -600,7 +600,7 @@
 
         if (fileType === 'pdf') {
             try {
-                const loadingTask = pdfjsLib.getDocument(fileUrl, loadingTaskOptions);
+                const loadingTask = pdfjsLib.getDocument({ url: fileUrl, cMapUrl: `https://unpkg.com/pdfjs-dist@3.4.120/cmaps/`, cMapPacked: true });
                 currentDocument = await loadingTask.promise;
                 await renderPdf(currentDocument, pdfViewerContainer, scale);
                 setupAnnotationEvents();
