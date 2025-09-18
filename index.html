@@ -286,6 +286,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { externalAudioMap } from './audio_config.js'; // Import the new file
 
         window.firebase = {
             initializeApp,
@@ -407,9 +408,7 @@
     const scaleMap = {
         'four': 4.0, 'five': 5.0, 'six': 6.0, 'seven': 7.0, 'eight': 8.0
     };
-    const externalAudioMap = {
-        'Hejinian_Lyn_naropa_95': 'https://archive.org/download/lyn-hejinian-and-tom-raworth-3-3-1999-1001/Lyn_Hejinian_and_Tom_Raworth_3-3-1999_%231001.mp3',
-    };
+    const universalPdfUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/blank_universal.pdf`;
 
     function resetAudioPlayer() {
         audioPlayer.pause();
@@ -465,36 +464,38 @@
                          audioUrl = externalAudio;
                     }
 
-                    if (pdf) {
-                        let customScale = 4.0;
-                        const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
-                        if (numericMatch) {
-                            customScale = parseInt(numericMatch[1]) / 100;
-                        } else {
-                            const wordMatch = pdf.name.match(/_([a-z]+)\.pdf$/);
-                            if (wordMatch && scaleMap[wordMatch[1]]) {
-                                customScale = scaleMap[wordMatch[1]];
+                    if (audioUrl) {
+                        if (pdf) {
+                            let customScale = 4.0;
+                            const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
+                            if (numericMatch) {
+                                customScale = parseInt(numericMatch[1]) / 100;
+                            } else {
+                                const wordMatch = pdf.name.match(/_([a-z]+)\.pdf$/);
+                                if (wordMatch && scaleMap[wordMatch[1]]) {
+                                    customScale = scaleMap[wordMatch[1]];
+                                }
                             }
+                            displayItems.push({
+                                id: pdf.name.replace('.pdf', ''),
+                                name: png.name,
+                                type: 'pdf',
+                                url: pdf.download_url,
+                                scale: customScale,
+                                thumbnailUrl: png.download_url,
+                                audioUrl: audioUrl
+                            });
+                        } else {
+                             displayItems.push({
+                                id: pngNameBase,
+                                name: png.name,
+                                type: 'pdf', // Changed to PDF to use the viewer
+                                url: universalPdfUrl, // Use the universal fallback PDF
+                                scale: 2.0,
+                                thumbnailUrl: png.download_url,
+                                audioUrl: audioUrl
+                            });
                         }
-                        displayItems.push({
-                            id: pdf.name.replace('.pdf', ''),
-                            name: png.name,
-                            type: 'pdf',
-                            url: pdf.download_url,
-                            scale: customScale,
-                            thumbnailUrl: png.download_url,
-                            audioUrl: audioUrl
-                        });
-                    } else if (audioUrl) {
-                         displayItems.push({
-                            id: png.name.replace('.png', ''),
-                            name: png.name,
-                            type: 'image',
-                            url: png.download_url,
-                            scale: 2.0,
-                            thumbnailUrl: png.download_url,
-                            audioUrl: audioUrl
-                        });
                     }
                 });
 
