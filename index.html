@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Research Collection</title>
+    <title>Poetry Collection</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>
         /* Base Styles */
@@ -114,21 +114,15 @@
             align-items: center;
             justify-content: flex-start;
         }
-        
-        /* New ts-pdf viewer styles */
-        .ts-pdf-viewer-container {
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-        #viewerContainer {
-            position: relative;
-            overflow: auto;
-            width: 100%;
-            height: 100%;
+        .pdf-canvas, .image-viewer {
+            display: block;
+            margin: 0 auto 28px auto;
+            height: auto;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            max-width: 100%;
         }
         
-        /* Top Controls (x, Zoom, Audio) */
+        /* Top Controls (x, Zoom) */
         .top-controls {
             position: fixed;
             top: 20px;
@@ -141,7 +135,6 @@
             transition: opacity 0.5s ease-in-out;
             opacity: 0;
             color: white;
-            padding-right: 20px;
         }
         .top-controls-visible {
             opacity: 1;
@@ -175,7 +168,7 @@
             padding: 5px 10px;
             border-radius: 20px;
         }
-        .control-button {
+        .zoom-button {
             background: none;
             border: 1px solid white;
             color: white;
@@ -186,51 +179,20 @@
             cursor: pointer;
             transition: background-color 0.2s;
         }
-        .control-button:hover {
+        .zoom-button:hover {
             background-color: rgba(255, 255, 255, 0.2);
-        }
-        
-        /* Annotation Controls (moved to bottom left) */
-        .annotation-controls {
-            position: fixed;
-            bottom: 60px;
-            left: 20px;
-            z-index: 1001;
-            display: none; /* Hide by default */
-            align-items: center;
-            gap: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 5px 10px;
-            border-radius: 20px;
-            color: white;
-            transition: opacity 0.5s ease-in-out;
-            opacity: 0;
-        }
-        .annotation-controls.visible {
-            display: flex;
-            opacity: 1;
-        }
-        .annotation-controls .control-button {
-            font-size: 16px;
-        }
-        .annotation-controls .control-button.active {
-            background-color: white;
-            color: black;
         }
 
         /* Audio Player */
         .audio-player-container {
             display: none;
-            width: 100%;
-            max-width: 600px;
+            width: 170px;
             background-color: rgba(0, 0, 0, 0.7);
             padding: 10px 15px;
             border-radius: 20px;
             color: white;
             flex-direction: column;
             gap: 5px;
-            margin-top: 15px;
-            box-sizing: border-box;
         }
         .audio-player-container.visible {
             display: flex;
@@ -290,8 +252,8 @@
             scrollbar-width: thin;
         }
     </style>
-    <script src="https://unpkg.com/@yermolim/ts-pdf@0.6.9/es5/build/pdf.js"></script>
-    <script src="https://unpkg.com/@yermolim/ts-pdf@0.6.9/es5/build/ts-pdf-viewer.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
 </head>
 <body>
 
@@ -307,9 +269,9 @@
     <div id="topControls" class="top-controls">
         <div style="display: flex; align-items: center; gap: 15px;">
             <div class="zoom-controls">
-                <button id="zoomOutBtn" class="control-button">-</button>
+                <button id="zoomOutBtn" class="zoom-button">-</button>
                 <span id="zoomLevel">100%</span>
-                <button id="zoomInBtn" class="control-button">+</button>
+                <button id="zoomInBtn" class="zoom-button">+</button>
             </div>
             <div class="close-button" onclick="closePdfModal()">
                 <span class="close">x</span>
@@ -326,25 +288,18 @@
             </div>
         </div>
     </div>
-    
-    <div id="annotationControls" class="annotation-controls">
-        <button id="highlightBtn" class="control-button" title="Highlight">H</button>
-        <button id="strikeoutBtn" class="control-button" title="Strikeout">S</button>
-        <button id="underlineBtn" class="control-button" title="Underline">U</button>
-    </div>
-    
     <div id="pdf-viewer-container" class="modal-content">
-        <div id="viewerContainer" class="ts-pdf-viewer-container"></div>
     </div>
 </div>
 
 <script>
     const repoOwner = 'rachelpearlstuart-eng';
-    const repoName = 'research';
+    const repoName = 'poetry';
     const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents`;
 
     const gridContainer = document.getElementById('grid-container');
     const modal = document.getElementById('pdfModal');
+    const pdfViewerContainer = document.getElementById('pdf-viewer-container');
     const topControls = document.getElementById('topControls');
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
@@ -352,24 +307,38 @@
     const rpsText = document.querySelector('.rps-text');
     const contactLink = document.querySelector('.contact-link');
 
-    const annotationControls = document.getElementById('annotationControls');
-    const highlightBtn = document.getElementById('highlightBtn');
-    const strikeoutBtn = document.getElementById('strikeoutBtn');
-    const underlineBtn = document.getElementById('underlineBtn');
-
     const audioPlayerContainer = document.getElementById('audio-player-container');
     const audioPlayer = document.getElementById('audio-player');
     const playPauseBtn = document.getElementById('play-pause-btn');
     const progressBar = document.getElementById('progress-bar');
     const progressBarFill = document.getElementById('progress-bar-fill');
     const timeDisplay = document.getElementById('time-display');
-
-    let currentDocumentUrl = null;
-    let tsPdfViewerInstance = null;
+    
+    let scale = 3.0;
+    let currentDocument = null;
     let controlsTimeout;
+    let currentViewerType = null;
+    let currentDocumentUrl = null;
+    let isRendering = false;
+
+    // This is the key fix for CORS issues with pdf.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    
+    // Explicitly set the CORS policy for the PDF loading task
+    const loadingTaskOptions = {
+      httpHeaders: {
+        'Access-Control-Allow-Origin': '*'
+      }
+    };
+
     const supportedAudioExts = ['.mp3', '.mp4', '.flac', '.ogg'];
-    const externalAudioMap = {
-        'Hejinian_Lyn_naropa_95': 'https://server16621.contentdm.oclc.org/dmwebservices/index.php?q=dmGetStreamingFile/p16621coll1/1632.mp3/byte/json',
+
+    const scaleMap = {
+        'four': 4.0,
+        'five': 5.0,
+        'six': 6.0,
+        'seven': 7.0,
+        'eight': 8.0,
     };
 
     function resetAudioPlayer() {
@@ -385,12 +354,22 @@
     function setupAudioPlayer(audioUrl) {
         resetAudioPlayer();
         if (audioUrl) {
+            console.log(`Setting audio source to: ${audioUrl}`);
             audioPlayer.src = audioUrl;
             audioPlayerContainer.classList.add('visible');
+
             audioPlayer.addEventListener('loadedmetadata', () => {
+                console.log('Audio metadata loaded. Duration:', audioPlayer.duration);
                 timeDisplay.textContent = `0:00 / ${formatTime(audioPlayer.duration)}`;
             }, { once: true });
+
+            audioPlayer.addEventListener('error', (e) => {
+                console.error('Audio loading error:', e);
+            });
+            
             audioPlayer.load();
+        } else {
+            console.log('No audio URL provided for this item.');
         }
     }
     
@@ -406,6 +385,7 @@
                 const audioFiles = files.filter(f => supportedAudioExts.some(ext => f.name.endsWith(ext)));
 
                 const displayItems = [];
+                
                 const pngsMap = new Map(pngs.map(p => [p.name.replace('.png', ''), p]));
                 const pdfsMap = new Map(pdfs.map(p => [p.name.replace('.pdf', ''), p]));
                 const audioMap = new Map(audioFiles.map(a => [a.name.replace(/\.[^/.]+$/, ''), a]));
@@ -413,26 +393,43 @@
                 pngs.forEach(png => {
                     const pngNameBase = png.name.replace('.png', '');
                     const pdf = pdfsMap.get(pngNameBase);
-                    let audioUrl = externalAudioMap[pngNameBase] || (audioMap.get(pngNameBase) ? audioMap.get(pngNameBase).download_url : null);
-                    
-                    if (!audioUrl) {
+                    let audio = audioMap.get(pngNameBase);
+
+                    if (!audio) {
                         const numMatch = pngNameBase.match(/^\d+/);
                         if (numMatch) {
                             const numPrefix = numMatch[0];
-                            const internalAudioFallback = audioFiles.find(a => a.name.startsWith(numPrefix));
-                            if (internalAudioFallback) {
-                                audioUrl = internalAudioFallback.download_url;
-                            }
+                            audio = audioFiles.find(a => a.name.startsWith(numPrefix));
                         }
                     }
 
                     if (pdf) {
+                        let customScale = 4.0;
+                        const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
+                        if (numericMatch) {
+                            customScale = parseInt(numericMatch[1]) / 100;
+                        } else {
+                            const wordMatch = pdf.name.match(/_([a-z]+)\.pdf$/);
+                            if (wordMatch && scaleMap[wordMatch[1]]) {
+                                customScale = scaleMap[wordMatch[1]];
+                            }
+                        }
                         displayItems.push({
                             name: png.name,
                             type: 'pdf',
                             url: pdf.download_url,
+                            scale: customScale,
                             thumbnailUrl: png.download_url,
-                            audioUrl: audioUrl
+                            audioUrl: audio ? audio.download_url : null
+                        });
+                    } else if (audio) {
+                         displayItems.push({
+                            name: png.name,
+                            type: 'image',
+                            url: png.download_url,
+                            scale: 2.0,
+                            thumbnailUrl: png.download_url,
+                            audioUrl: audio.download_url
                         });
                     }
                 });
@@ -443,11 +440,13 @@
                     if (!isNaN(numA) && !isNaN(numB)) {
                         return numA - numB;
                     }
+                    if (!isNaN(numA)) return -1;
+                    if (!isNaN(numB)) return 1;
                     return a.name.localeCompare(b.name);
                 });
 
                 if (displayItems.length === 0) {
-                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PNG thumbnail has a matching PDF or a corresponding audio link.</p>';
+                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PDF or audio file has a matching PNG thumbnail.</p>';
                     return;
                 }
                 
@@ -455,8 +454,10 @@
                 displayItems.forEach(item => {
                     const gridItem = document.createElement('div');
                     gridItem.className = 'grid-item';
-                    gridItem.onclick = () => openViewer(item.url, item.audioUrl);
+                    gridItem.onclick = () => openViewer(item.url, item.scale, item.audioUrl, item.type);
+                    
                     gridItem.style.backgroundImage = `url('${item.thumbnailUrl}')`;
+                    
                     gridContainer.appendChild(gridItem);
                 });
             })
@@ -466,76 +467,158 @@
             });
     }
 
-    async function openViewer(fileUrl, audioUrl) {
+    async function renderPdf(pdf, container, scale) {
+        if (isRendering) return;
+        isRendering = true;
+        container.innerHTML = '';
+        try {
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale });
+                const canvas = document.createElement('canvas');
+                canvas.className = 'pdf-canvas';
+                const canvasContext = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                container.appendChild(canvas);
+                const renderContext = { canvasContext, viewport };
+                await page.render(renderContext).promise;
+            }
+        } catch (e) {
+            console.error('Error rendering PDF page:', e);
+            container.innerHTML = `<p style="color:white; text-align:center;">Error rendering PDF. Please try again.</p>`;
+        } finally {
+            isRendering = false;
+        }
+    }
+
+    async function reRenderPdf(pdf, container, newScale, oldScale) {
+        if (isRendering) return;
+        isRendering = true;
+        
+        const oldScrollTop = container.scrollTop;
+        const pageCanvases = container.querySelectorAll('.pdf-canvas');
+        
+        let currentPageIndex = 0;
+        let offsetInPage = 0;
+
+        for (let i = 0; i < pageCanvases.length; i++) {
+            const canvas = pageCanvases[i];
+            
+            if (canvas.offsetTop <= oldScrollTop + 1) { 
+                currentPageIndex = i;
+                offsetInPage = oldScrollTop - canvas.offsetTop;
+            } else {
+                break;
+            }
+        }
+
+        const renderPromises = [];
+        try {
+            for (let i = 0; i < pdf.numPages; i++) {
+                const page = await pdf.getPage(i + 1);
+                const viewport = page.getViewport({ scale: newScale });
+                const canvas = pageCanvases[i];
+                
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                const renderContext = { canvasContext: canvas.getContext('2d'), viewport };
+                renderPromises.push(page.render(renderContext).promise);
+            }
+        } catch (e) {
+            console.error('Error re-rendering PDF page:', e);
+            container.innerHTML = `<p style="color:white; text-align:center;">Error re-rendering PDF. Please try again.</p>`;
+            isRendering = false;
+            return;
+        }
+
+        await Promise.all(renderPromises);
+
+        const newCurrentPageCanvas = pageCanvases[currentPageIndex];
+        const newOffsetInPage = offsetInPage * (newScale / oldScale);
+        
+        // This two-step process ensures all layout is complete before we scroll
+        Promise.resolve().then(() => {
+            requestAnimationFrame(() => {
+                container.scrollTop = newCurrentPageCanvas.offsetTop + newOffsetInPage;
+                isRendering = false;
+            });
+        });
+    }
+
+    function renderImage(imageUrl, container, scale) {
+        container.innerHTML = '';
+        const image = document.createElement('img');
+        image.className = 'image-viewer';
+        image.src = imageUrl;
+        image.style.transform = `scale(${scale})`;
+        image.style.transformOrigin = 'center top';
+        container.appendChild(image);
+    }
+    
+    async function openViewer(fileUrl, initialScale, audioUrl, fileType) {
         modal.classList.add('show');
         topControls.classList.add('top-controls-visible');
-        annotationControls.classList.add('visible');
         
         setupAudioPlayer(audioUrl);
-        
-        currentDocumentUrl = fileUrl;
-        
-        const viewerContainer = document.getElementById('viewerContainer');
-        viewerContainer.innerHTML = '';
-        
-        try {
-            tsPdfViewerInstance = new TsPdfViewer({
-                container: viewerContainer,
-                ui: { toolbar: false },
-            });
-            
-            await tsPdfViewerInstance.openPdfAsync({ url: fileUrl });
-            
-            tsPdfViewerInstance.on(TsPdfViewer.Events.DOCUMENT_LOADED, () => {
-                 zoomLevelSpan.textContent = `${Math.round(tsPdfViewerInstance.getScale() * 100)}%`;
-            });
-        } catch (e) {
-            console.error('Error loading PDF:', e);
-            viewerContainer.innerHTML = '<p style="color:white; text-align:center;">Failed to load PDF. Please try again or check the file URL.</p>';
+
+        scale = initialScale;
+        zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+        currentViewerType = fileType;
+
+        pdfViewerContainer.innerHTML = '<p style="color:white; text-align:center;">Loading...</p>';
+
+        if (fileType === 'pdf') {
+            try {
+                const loadingTask = pdfjsLib.getDocument(fileUrl, loadingTaskOptions);
+                currentDocument = await loadingTask.promise;
+                await renderPdf(currentDocument, pdfViewerContainer, scale);
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                pdfViewerContainer.innerHTML = `<p style="color:white; text-align:center;">Failed to load PDF. Check browser console for more details.</p>`;
+            }
+        } else if (fileType === 'image') {
+            currentDocument = fileUrl;
+            renderImage(currentDocument, pdfViewerContainer, scale);
         }
-        
-        window.tsPdfViewerInstance = tsPdfViewerInstance;
     }
 
     function closePdfModal() {
         modal.classList.remove('show');
-        document.getElementById('viewerContainer').innerHTML = '';
-        currentDocumentUrl = null;
-        if (tsPdfViewerInstance) {
-            tsPdfViewerInstance.destroy();
-            tsPdfViewerInstance = null;
-        }
+        pdfViewerContainer.innerHTML = '';
+        currentDocument = null;
+        currentViewerType = null;
         resetAudioPlayer();
-        annotationControls.classList.remove('visible');
     }
-    
-    zoomInBtn.onclick = () => {
-        if (tsPdfViewerInstance) {
-            tsPdfViewerInstance.setScale(tsPdfViewerInstance.getScale() + 0.25);
-            zoomLevelSpan.textContent = `${Math.round(tsPdfViewerInstance.getScale() * 100)}%`;
+
+    zoomInBtn.onclick = async () => {
+        if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
+            const oldScale = scale;
+            scale += 0.25;
+            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+            await reRenderPdf(currentDocument, pdfViewerContainer, scale, oldScale);
+        } else if (currentDocument && currentViewerType === 'image') {
+            scale += 0.25;
+            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+            document.querySelector('.image-viewer').style.transform = `scale(${scale})`;
         }
     };
 
-    zoomOutBtn.onclick = () => {
-        if (tsPdfViewerInstance && tsPdfViewerInstance.getScale() > 0.25) {
-            tsPdfViewerInstance.setScale(tsPdfViewerInstance.getScale() - 0.25);
-            zoomLevelSpan.textContent = `${Math.round(tsPdfViewerInstance.getScale() * 100)}%`;
-        }
-    };
-    
-    function setActiveTool(tool) {
-        if (tsPdfViewerInstance) {
-            tsPdfViewerInstance.setToolMode(tool);
-            document.querySelectorAll('.annotation-controls .control-button').forEach(btn => btn.classList.remove('active'));
-            if (tool !== TsPdfViewer.ToolMode.DEFAULT) {
-                document.getElementById(tool + 'Btn').classList.add('active');
+    zoomOutBtn.onclick = async () => {
+        if (scale > 0.25) {
+            if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
+                const oldScale = scale;
+                scale -= 0.25;
+                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+                await reRenderPdf(currentDocument, pdfViewerContainer, scale, oldScale);
+            } else if (currentDocument && currentViewerType === 'image') {
+                scale -= 0.25;
+                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+                document.querySelector('.image-viewer').style.transform = `scale(${scale})`;
             }
         }
-    }
-    
-    highlightBtn.onclick = () => setActiveTool(TsPdfViewer.ToolMode.TEXT_HIGHLIGHT);
-    strikeoutBtn.onclick = () => setActiveTool(TsPdfViewer.ToolMode.STRIKEOUT);
-    underlineBtn.onclick = () => setActiveTool(TsPdfViewer.ToolMode.TEXT_UNDERLINE);
+    };
 
     modal.onmousemove = () => {
         topControls.classList.add('top-controls-visible');
@@ -556,6 +639,10 @@
     };
 
     playPauseBtn.addEventListener('click', async () => {
+        if (!audioPlayer.src) {
+            return;
+        }
+        
         try {
             if (audioPlayer.paused) {
                 await audioPlayer.play();
