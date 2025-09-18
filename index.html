@@ -282,685 +282,627 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
     <script type="module">
+        const __app_id = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+        const __firebase_config = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : null;
+        const __initial_auth_token = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { externalAudioMap } from './audio_config.js';
 
-        window.firebase = {
-            initializeApp,
-            getAuth,
-            signInAnonymously,
-            signInWithCustomToken,
-            onAuthStateChanged,
-            getFirestore,
-            doc,
-            getDoc,
-            setDoc,
-            onSnapshot,
-            setLogLevel
-        };
-    </script>
-</head>
-<body>
-
-<div id="grid-container" class="grid-container">
-</div>
-
-<div class="footer-bar">
-    <div id="userIdDisplay" style="margin-right: auto; text-transform: none; font-family: monospace; font-size: 0.8em; opacity: 0.7;">User ID: Loading...</div>
-    <a href="mailto:rachelpearlstuart@gmail.com" class="contact-link contact-link-hidden">CONTACT</a>
-    <span class="rps-text">RACHEL PEARL STUART</span>
-</div>
-
-<div id="pdfModal" class="modal">
-    <div id="topControls" class="top-controls">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <div class="zoom-controls">
-                <button id="zoomOutBtn" class="zoom-button">-</button>
-                <span id="zoomLevel">100%</span>
-                <button id="zoomInBtn" class="zoom-button">+</button>
-            </div>
-            <div class="close-button" onclick="closePdfModal()">
-                <span class="close">x</span>
-            </div>
-        </div>
-        <div id="audio-player-container" class="audio-player-container">
-            <audio id="audio-player" preload="metadata" crossorigin="anonymous"></audio>
-            <div class="audio-controls">
-                <button id="play-pause-btn" class="play-pause-btn">▶</button>
-                <div id="progress-bar" class="progress-bar">
-                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
-                </div>
-                <span id="time-display" class="time-display">0:00 / 0:00</span>
-            </div>
-        </div>
-    </div>
-    <div id="bottomRightControls" class="bottom-right-controls">
-        <button id="annotateBtn" class="control-button">Annotate</button>
-    </div>
-    <div id="pdf-viewer-container" class="modal-content">
-    </div>
-</div>
-
-<script type="module">
-    const __app_id = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
-    const __firebase_config = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : null;
-    const __initial_auth_token = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
-
-    if (!__firebase_config) {
-        console.error("Firebase config is not available. Firestore will not work.");
-    }
-    
-    const {
-        initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
-        getFirestore, doc, getDoc, setDoc, onSnapshot, setLogLevel
-    } = window.firebase;
-    
-    let db;
-    let auth;
-    let userId;
-
-    const repoOwner = 'rachelpearlstuart-eng';
-    const repoName = 'research';
-    const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents`;
-
-    const gridContainer = document.getElementById('grid-container');
-    const modal = document.getElementById('pdfModal');
-    const pdfViewerContainer = document.getElementById('pdf-viewer-container');
-    const topControls = document.getElementById('topControls');
-    const bottomRightControls = document.getElementById('bottomRightControls');
-    const zoomInBtn = document.getElementById('zoomInBtn');
-    const zoomOutBtn = document.getElementById('zoomOutBtn');
-    const zoomLevelSpan = document.getElementById('zoomLevel');
-    const rpsText = document.querySelector('.rps-text');
-    const contactLink = document.querySelector('.contact-link');
-    const annotateBtn = document.getElementById('annotateBtn');
-
-    const audioPlayerContainer = document.getElementById('audio-player-container');
-    const audioPlayer = document.getElementById('audio-player');
-    const playPauseBtn = document.getElementById('play-pause-btn');
-    const progressBar = document.getElementById('progress-bar');
-    const progressBarFill = document.getElementById('progress-bar-fill');
-    const timeDisplay = document.getElementById('time-display');
-    const userIdDisplay = document.getElementById('userIdDisplay');
-
-    let scale = 3.0;
-    let currentDocument = null;
-    let currentFileId = null;
-    let controlsTimeout;
-    let currentViewerType = null;
-    let isRendering = false;
-    let isAnnotating = false;
-    
-    let annotationCanvases = [];
-    let isDrawing = false;
-    let currentPath = [];
-    let annotationListener = null;
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-    
-    const loadingTaskOptions = {
-      httpHeaders: { 'Access-Control-Allow-Origin': '*' }
-    };
-    const supportedAudioExts = ['.mp3', '.mp4', '.flac', '.ogg'];
-    const scaleMap = {
-        'four': 4.0, 'five': 5.0, 'six': 6.0, 'seven': 7.0, 'eight': 8.0
-    };
-    const universalPdfUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/blank_universal.pdf`;
-
-    function resetAudioPlayer() {
-        audioPlayer.pause();
-        audioPlayer.currentTime = 0;
-        audioPlayer.src = '';
-        playPauseBtn.textContent = '▶';
-        progressBarFill.style.width = '0%';
-        timeDisplay.textContent = '0:00 / 0:00';
-        audioPlayerContainer.classList.remove('visible');
-    }
-
-    function setupAudioPlayer(audioUrl) {
-        resetAudioPlayer();
-        if (audioUrl) {
-            audioPlayer.src = audioUrl;
-            audioPlayerContainer.classList.add('visible');
-            audioPlayer.addEventListener('loadedmetadata', () => {
-                timeDisplay.textContent = `0:00 / ${formatTime(audioPlayer.duration)}`;
-            }, { once: true });
-            audioPlayer.load();
+        if (!__firebase_config) {
+            console.error("Firebase config is not available. Firestore will not work.");
         }
-    }
-    
-    function fetchAndRenderGrid() {
-        fetch(apiUrl)
-            .then(response => {
-                if (!response.ok) {
-                    gridContainer.innerHTML = `<p style="color:black; text-align:center;">Failed to load files from GitHub. Error: ${response.statusText}</p>`;
-                    throw new Error(`GitHub API Error: ${response.statusText}`);
-                }
-                return response.json();
-            })
-            .then(files => {
-                const pdfs = files.filter(f => f.name.endsWith('.pdf'));
-                const pngs = files.filter(f => f.name.endsWith('.png'));
-                const audioFiles = files.filter(f => supportedAudioExts.some(ext => f.name.endsWith(ext)));
+        
+        let db;
+        let auth;
+        let userId;
 
-                const displayItems = [];
-                const pngsMap = new Map(pngs.map(p => [p.name.replace('.png', ''), p]));
-                const pdfsMap = new Map(pdfs.map(p => [p.name.replace('.pdf', ''), p]));
-                const audioMap = new Map(audioFiles.map(a => [a.name.replace(/\.[^/.]+$/, ''), a]));
+        const repoOwner = 'rachelpearlstuart-eng';
+        const repoName = 'research';
+        const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents`;
 
-                pngs.forEach(png => {
-                    const pngNameBase = png.name.replace('.png', '');
-                    const pdf = pdfsMap.get(pngNameBase);
-                    const repoAudio = audioMap.get(pngNameBase);
-                    const externalAudio = externalAudioMap[pngNameBase];
+        const gridContainer = document.getElementById('grid-container');
+        const modal = document.getElementById('pdfModal');
+        const pdfViewerContainer = document.getElementById('pdf-viewer-container');
+        const topControls = document.getElementById('topControls');
+        const bottomRightControls = document.getElementById('bottomRightControls');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomLevelSpan = document.getElementById('zoomLevel');
+        const rpsText = document.querySelector('.rps-text');
+        const contactLink = document.querySelector('.contact-link');
+        const annotateBtn = document.getElementById('annotateBtn');
 
-                    let audioUrl = null;
-                    if (repoAudio) {
-                         audioUrl = repoAudio.download_url;
-                    } else if (externalAudio) {
-                         audioUrl = externalAudio;
+        const audioPlayerContainer = document.getElementById('audio-player-container');
+        const audioPlayer = document.getElementById('audio-player');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const timeDisplay = document.getElementById('time-display');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+
+        const externalAudioMap = {
+            "Bissett, Bill (Oct 1969) - I006-11-083.1": "https://raw.githubusercontent.com/rachelpearlstuart-eng/research/main/Bissett%2C%20Bill%20(Oct%201969)%20-%20I006-11-083.1.mp3",
+            "heijinian_lyn_naropa_95": "https://raw.githubusercontent.com/rachelpearlstuart-eng/research/main/heijinian_lyn_naropa_95.mp3",
+            "heijinian.raworth.sfart.1999": "https://raw.githubusercontent.com/rachelpearlstuart-eng/research/main/heijinian.raworth.sfart.1999.mp3",
+        };
+
+        let scale = 3.0;
+        let currentDocument = null;
+        let currentFileId = null;
+        let controlsTimeout;
+        let currentViewerType = null;
+        let isRendering = false;
+        let isAnnotating = false;
+        
+        let annotationCanvases = [];
+        let isDrawing = false;
+        let currentPath = [];
+        let annotationListener = null;
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        
+        const loadingTaskOptions = {
+          httpHeaders: { 'Access-Control-Allow-Origin': '*' }
+        };
+        const supportedAudioExts = ['.mp3', '.mp4', '.flac', '.ogg'];
+        const scaleMap = {
+            'four': 4.0, 'five': 5.0, 'six': 6.0, 'seven': 7.0, 'eight': 8.0
+        };
+        const universalPdfUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/blank_universal.pdf`;
+
+        function resetAudioPlayer() {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            audioPlayer.src = '';
+            playPauseBtn.textContent = '▶';
+            progressBarFill.style.width = '0%';
+            timeDisplay.textContent = '0:00 / 0:00';
+            audioPlayerContainer.classList.remove('visible');
+        }
+
+        function setupAudioPlayer(audioUrl) {
+            resetAudioPlayer();
+            if (audioUrl) {
+                audioPlayer.src = audioUrl;
+                audioPlayerContainer.classList.add('visible');
+                audioPlayer.addEventListener('loadedmetadata', () => {
+                    timeDisplay.textContent = `0:00 / ${formatTime(audioPlayer.duration)}`;
+                }, { once: true });
+                audioPlayer.load();
+            }
+        }
+        
+        function fetchAndRenderGrid() {
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        gridContainer.innerHTML = `<p style="color:black; text-align:center;">Failed to load files from GitHub. Error: ${response.statusText}</p>`;
+                        throw new Error(`GitHub API Error: ${response.statusText}`);
                     }
+                    return response.json();
+                })
+                .then(files => {
+                    const pdfs = files.filter(f => f.name.endsWith('.pdf'));
+                    const pngs = files.filter(f => f.name.endsWith('.png'));
+                    const audioFiles = files.filter(f => supportedAudioExts.some(ext => f.name.endsWith(ext)));
 
-                    if (audioUrl) {
-                        let pdfUrlToUse = null;
-                        let customScale = 2.0;
+                    const displayItems = [];
+                    const pngsMap = new Map(pngs.map(p => [p.name.replace('.png', ''), p]));
+                    const pdfsMap = new Map(pdfs.map(p => [p.name.replace('.pdf', ''), p]));
+                    const audioMap = new Map(audioFiles.map(a => [a.name.replace(/\.[^/.]+$/, ''), a]));
 
-                        if (pdf) {
-                            pdfUrlToUse = pdf.download_url;
-                            const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
-                            if (numericMatch) {
-                                customScale = parseInt(numericMatch[1]) / 100;
-                            } else {
-                                const wordMatch = pdf.name.match(/_([a-z]+)\.pdf$/);
-                                if (wordMatch && scaleMap[wordMatch[1]]) {
-                                    customScale = scaleMap[wordMatch[1]];
-                                }
-                            }
-                        } else {
-                            pdfUrlToUse = universalPdfUrl;
+                    pngs.forEach(png => {
+                        const pngNameBase = png.name.replace('.png', '');
+                        const pdf = pdfsMap.get(pngNameBase);
+                        const repoAudio = audioMap.get(pngNameBase);
+                        const externalAudio = externalAudioMap[pngNameBase];
+
+                        let audioUrl = null;
+                        if (repoAudio) {
+                             audioUrl = repoAudio.download_url;
+                        } else if (externalAudio) {
+                             audioUrl = externalAudio;
                         }
 
-                        displayItems.push({
-                            id: pngNameBase,
-                            name: png.name,
-                            type: 'pdf',
-                            url: pdfUrlToUse,
-                            scale: customScale,
-                            thumbnailUrl: png.download_url,
-                            audioUrl: audioUrl
-                        });
+                        if (audioUrl) {
+                            let pdfUrlToUse = null;
+                            let customScale = 2.0;
+
+                            if (pdf) {
+                                pdfUrlToUse = pdf.download_url;
+                                const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
+                                if (numericMatch) {
+                                    customScale = parseInt(numericMatch[1]) / 100;
+                                } else {
+                                    const wordMatch = pdf.name.match(/_([a-z]+)\.pdf$/);
+                                    if (wordMatch && scaleMap[wordMatch[1]]) {
+                                        customScale = scaleMap[wordMatch[1]];
+                                    }
+                                }
+                            } else {
+                                pdfUrlToUse = universalPdfUrl;
+                            }
+
+                            displayItems.push({
+                                id: pngNameBase,
+                                name: png.name,
+                                type: 'pdf',
+                                url: pdfUrlToUse,
+                                scale: customScale,
+                                thumbnailUrl: png.download_url,
+                                audioUrl: audioUrl
+                            });
+                        }
+                    });
+
+                    displayItems.sort((a, b) => {
+                        const numA = parseInt(a.name.match(/^\d+/));
+                        const numB = parseInt(b.name.match(/^\d+/));
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return numA - numB;
+                        }
+                        if (!isNaN(numA)) return -1;
+                        if (!isNaN(numB)) return 1;
+                        return a.name.localeCompare(b.name);
+                    });
+
+                    if (displayItems.length === 0) {
+                        gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PNG thumbnail has a corresponding PDF or audio file.</p>';
+                        return;
+                    }
+                    
+                    gridContainer.innerHTML = '';
+                    displayItems.forEach(item => {
+                        const gridItem = document.createElement('div');
+                        gridItem.className = 'grid-item';
+                        gridItem.onclick = () => openViewer(item.id, item.url, item.scale, item.audioUrl, item.type);
+                        gridItem.style.backgroundImage = `url('${item.thumbnailUrl}')`;
+                        gridContainer.appendChild(gridItem);
+                    });
+                })
+                .catch(error => {
+                    console.error(error);
+                    if (gridContainer.innerHTML === '') {
+                        gridContainer.innerHTML = `<p style="color:black; text-align:center;">Failed to load files from GitHub. Error: ${error.message}</p>`;
                     }
                 });
-
-                displayItems.sort((a, b) => {
-                    const numA = parseInt(a.name.match(/^\d+/));
-                    const numB = parseInt(b.name.match(/^\d+/));
-                    if (!isNaN(numA) && !isNaN(numB)) {
-                        return numA - numB;
-                    }
-                    if (!isNaN(numA)) return -1;
-                    if (!isNaN(numB)) return 1;
-                    return a.name.localeCompare(b.name);
-                });
-
-                if (displayItems.length === 0) {
-                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PNG thumbnail has a corresponding PDF or audio file.</p>';
-                    return;
-                }
-                
-                gridContainer.innerHTML = '';
-                displayItems.forEach(item => {
-                    const gridItem = document.createElement('div');
-                    gridItem.className = 'grid-item';
-                    gridItem.onclick = () => openViewer(item.id, item.url, item.scale, item.audioUrl, item.type);
-                    gridItem.style.backgroundImage = `url('${item.thumbnailUrl}')`;
-                    gridContainer.appendChild(gridItem);
-                });
-            })
-            .catch(error => {
-                console.error(error);
-                if (gridContainer.innerHTML === '') {
-                    gridContainer.innerHTML = `<p style="color:black; text-align:center;">Failed to load files from GitHub. Error: ${error.message}</p>`;
-                }
-            });
-    }
-
-    async function renderPdf(pdf, container, scale) {
-        if (isRendering) return;
-        isRendering = true;
-        container.innerHTML = '';
-        annotationCanvases = [];
-        try {
-            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                const page = await pdf.getPage(pageNum);
-                const viewport = page.getViewport({ scale });
-                const canvas = document.createElement('canvas');
-                canvas.className = 'pdf-canvas';
-                const canvasContext = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                container.appendChild(canvas);
-                const renderContext = { canvasContext, viewport };
-                await page.render(renderContext).promise;
-                const annotationCanvas = document.createElement('canvas');
-                annotationCanvas.className = 'annotation-canvas';
-                annotationCanvas.width = viewport.width;
-                annotationCanvas.height = viewport.height;
-                annotationCanvas.style.top = `${canvas.offsetTop}px`;
-                container.appendChild(annotationCanvas);
-                annotationCanvases.push(annotationCanvas);
-            }
-        } catch (e) {
-            console.error('Error rendering PDF page:', e);
-            container.innerHTML = `<p style="color:white; text-align:center;">Error rendering PDF. Please try again.</p>`;
-        } finally {
-            isRendering = false;
         }
-    }
 
-    function renderImage(imageUrl, container, scale) {
-        container.innerHTML = '';
-        annotationCanvases = [];
-        const image = document.createElement('img');
-        image.className = 'image-viewer';
-        image.src = imageUrl;
-        image.style.transform = `scale(${scale})`;
-        image.style.transformOrigin = 'center top';
-        container.appendChild(image);
-        const annotationCanvas = document.createElement('canvas');
-        annotationCanvas.className = 'annotation-canvas';
-        image.onload = () => {
-            annotationCanvas.width = image.naturalWidth;
-            annotationCanvas.height = image.naturalHeight;
-            annotationCanvas.style.transform = `scale(${scale})`;
-            annotationCanvas.style.transformOrigin = 'center top';
-            annotationCanvas.style.top = `${image.offsetTop}px`;
-            annotationCanvas.style.left = `${image.offsetLeft}px`;
-        };
-        container.appendChild(annotationCanvas);
-        annotationCanvases.push(annotationCanvas);
-    }
-    
-    async function openViewer(fileId, fileUrl, initialScale, audioUrl, fileType) {
-        modal.classList.add('show');
-        topControls.classList.add('top-controls-visible');
-        bottomRightControls.classList.add('bottom-right-controls-visible');
-        
-        setupAudioPlayer(audioUrl);
-        
-        currentFileId = fileId;
-        scale = initialScale;
-        zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-        currentViewerType = fileType;
-
-        pdfViewerContainer.innerHTML = '<p style="color:white; text-align:center;">Loading...</p>';
-
-        if (fileType === 'pdf') {
+        async function renderPdf(pdf, container, scale) {
+            if (isRendering) return;
+            isRendering = true;
+            container.innerHTML = '';
+            annotationCanvases = [];
             try {
-                const loadingTask = pdfjsLib.getDocument({ url: fileUrl, cMapUrl: `https://unpkg.com/pdfjs-dist@3.4.120/cmaps/`, cMapPacked: true });
-                currentDocument = await loadingTask.promise;
-                await renderPdf(currentDocument, pdfViewerContainer, scale);
-                setupAnnotationEvents();
-                subscribeToAnnotations();
-            } catch (error) {
-                console.error('Error loading PDF:', error);
-                pdfViewerContainer.innerHTML = `<p style="color:white; text-align:center;">Failed to load PDF. Check browser console for more details.</p>`;
-            }
-        } else if (fileType === 'image') {
-            currentDocument = fileUrl;
-            renderImage(currentDocument, pdfViewerContainer, scale);
-            setupAnnotationEvents();
-            subscribeToAnnotations();
-        }
-    }
-
-    function closePdfModal() {
-        modal.classList.remove('show');
-        pdfViewerContainer.innerHTML = '';
-        currentDocument = null;
-        currentFileId = null;
-        currentViewerType = null;
-        resetAudioPlayer();
-        if (annotationListener) {
-            annotationListener();
-            annotationListener = null;
-        }
-    }
-
-    zoomInBtn.onclick = async () => {
-        if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
-            scale += 0.25;
-            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-            await reRenderPdfAndAnnotations();
-        } else if (currentDocument && currentViewerType === 'image') {
-            scale += 0.25;
-            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-            const image = document.querySelector('.image-viewer');
-            if (image) image.style.transform = `scale(${scale})`;
-            repositionAnnotationCanvases();
-        }
-    };
-
-    zoomOutBtn.onclick = async () => {
-        if (scale > 0.25) {
-            if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
-                scale -= 0.25;
-                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-                await reRenderPdfAndAnnotations();
-            } else if (currentDocument && currentViewerType === 'image') {
-                scale -= 0.25;
-                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
-                const image = document.querySelector('.image-viewer');
-                if (image) image.style.transform = `scale(${scale})`;
-                repositionAnnotationCanvases();
-            }
-        }
-    };
-
-    async function reRenderPdfAndAnnotations() {
-        if (isRendering) return;
-        isRendering = true;
-        
-        const oldScale = scale - 0.25;
-        const pageCanvases = pdfViewerContainer.querySelectorAll('.pdf-canvas');
-        const oldScrollTop = pdfViewerContainer.scrollTop;
-        
-        let currentPageIndex = 0;
-        let offsetInPage = 0;
-
-        for (let i = 0; i < pageCanvases.length; i++) {
-            const canvas = pageCanvases[i];
-            
-            if (canvas.offsetTop <= oldScrollTop + 1) { 
-                currentPageIndex = i;
-                offsetInPage = oldScrollTop - canvas.offsetTop;
-            } else {
-                break;
-            }
-        }
-        
-        const renderPromises = [];
-        try {
-            for (let i = 0; i < currentDocument.numPages; i++) {
-                const page = await currentDocument.getPage(i + 1);
-                const viewport = page.getViewport({ scale });
-                const canvas = pageCanvases[i];
-                
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                
-                const renderContext = { canvasContext: canvas.getContext('2d'), viewport };
-                renderPromises.push(page.render(renderContext).promise);
-            }
-        } catch (e) {
-            console.error('Error re-rendering PDF page:', e);
-            isRendering = false;
-            return;
-        }
-        await Promise.all(renderPromises);
-        
-        const newCurrentPageCanvas = pageCanvases[currentPageIndex];
-        const newOffsetInPage = offsetInPage * (scale / oldScale);
-        
-        repositionAnnotationCanvases();
-        redrawAllAnnotations();
-
-        Promise.resolve().then(() => {
-            requestAnimationFrame(() => {
-                pdfViewerContainer.scrollTop = newCurrentPageCanvas.offsetTop + newOffsetInPage;
-                isRendering = false;
-            });
-        });
-    }
-
-    function repositionAnnotationCanvases() {
-        if (currentViewerType === 'pdf') {
-            const pdfCanvases = pdfViewerContainer.querySelectorAll('.pdf-canvas');
-            pdfCanvases.forEach((pdfCanvas, index) => {
-                const annotationCanvas = annotationCanvases[index];
-                if (annotationCanvas) {
-                    annotationCanvas.width = pdfCanvas.width;
-                    annotationCanvas.height = pdfCanvas.height;
-                    annotationCanvas.style.top = `${pdfCanvas.offsetTop}px`;
-                    annotationCanvas.style.left = `${pdfCanvas.offsetLeft}px`;
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'pdf-canvas';
+                    const canvasContext = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    container.appendChild(canvas);
+                    const renderContext = { canvasContext, viewport };
+                    await page.render(renderContext).promise;
+                    const annotationCanvas = document.createElement('canvas');
+                    annotationCanvas.className = 'annotation-canvas';
+                    annotationCanvas.width = viewport.width;
+                    annotationCanvas.height = viewport.height;
+                    annotationCanvas.style.top = `${canvas.offsetTop}px`;
+                    container.appendChild(annotationCanvas);
+                    annotationCanvases.push(annotationCanvas);
                 }
-            });
-        } else if (currentViewerType === 'image') {
-            const image = document.querySelector('.image-viewer');
-            if (image && annotationCanvases[0]) {
-                const annotationCanvas = annotationCanvases[0];
-                const rect = image.getBoundingClientRect();
+            } catch (e) {
+                console.error('Error rendering PDF page:', e);
+                container.innerHTML = `<p style="color:white; text-align:center;">Error rendering PDF. Please try again.</p>`;
+            } finally {
+                isRendering = false;
+            }
+        }
+
+        function renderImage(imageUrl, container, scale) {
+            container.innerHTML = '';
+            annotationCanvases = [];
+            const image = document.createElement('img');
+            image.className = 'image-viewer';
+            image.src = imageUrl;
+            image.style.transform = `scale(${scale})`;
+            image.style.transformOrigin = 'center top';
+            container.appendChild(image);
+            const annotationCanvas = document.createElement('canvas');
+            annotationCanvas.className = 'annotation-canvas';
+            image.onload = () => {
                 annotationCanvas.width = image.naturalWidth;
                 annotationCanvas.height = image.naturalHeight;
                 annotationCanvas.style.transform = `scale(${scale})`;
                 annotationCanvas.style.transformOrigin = 'center top';
                 annotationCanvas.style.top = `${image.offsetTop}px`;
                 annotationCanvas.style.left = `${image.offsetLeft}px`;
+            };
+            container.appendChild(annotationCanvas);
+            annotationCanvases.push(annotationCanvas);
+        }
+        
+        async function openViewer(fileId, fileUrl, initialScale, audioUrl, fileType) {
+            modal.classList.add('show');
+            topControls.classList.add('top-controls-visible');
+            bottomRightControls.classList.add('bottom-right-controls-visible');
+            
+            setupAudioPlayer(audioUrl);
+            
+            currentFileId = fileId;
+            scale = initialScale;
+            zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+            currentViewerType = fileType;
+
+            pdfViewerContainer.innerHTML = '<p style="color:white; text-align:center;">Loading...</p>';
+
+            if (fileType === 'pdf') {
+                try {
+                    const loadingTask = pdfjsLib.getDocument({ url: fileUrl, cMapUrl: `https://unpkg.com/pdfjs-dist@3.4.120/cmaps/`, cMapPacked: true });
+                    currentDocument = await loadingTask.promise;
+                    await renderPdf(currentDocument, pdfViewerContainer, scale);
+                    setupAnnotationEvents();
+                    subscribeToAnnotations();
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    pdfViewerContainer.innerHTML = `<p style="color:white; text-align:center;">Failed to load PDF. Check browser console for more details.</p>`;
+                }
+            } else if (fileType === 'image') {
+                currentDocument = fileUrl;
+                renderImage(currentDocument, pdfViewerContainer, scale);
+                setupAnnotationEvents();
+                subscribeToAnnotations();
             }
         }
-    }
 
-    modal.onmousemove = () => {
-        topControls.classList.add('top-controls-visible');
-        bottomRightControls.classList.add('bottom-right-controls-visible');
-        clearTimeout(controlsTimeout);
-        controlsTimeout = setTimeout(() => {
-            topControls.classList.remove('top-controls-visible');
-            bottomRightControls.classList.remove('bottom-right-controls-visible');
-        }, 2000);
-    };
-
-    window.onclick = function(event) {
-        if (event.target === modal) {
-            closePdfModal();
-        }
-    };
-
-    rpsText.onclick = function() {
-        contactLink.classList.toggle('contact-link-hidden');
-    };
-
-    playPauseBtn.addEventListener('click', async () => {
-        if (!audioPlayer.src) return;
-        try {
-            if (audioPlayer.paused) {
-                await audioPlayer.play();
-            } else {
-                audioPlayer.pause();
+        function closePdfModal() {
+            modal.classList.remove('show');
+            pdfViewerContainer.innerHTML = '';
+            currentDocument = null;
+            currentFileId = null;
+            currentViewerType = null;
+            resetAudioPlayer();
+            if (annotationListener) {
+                annotationListener();
+                annotationListener = null;
             }
-        } catch (error) {
-                console.error('Playback failed. Error:', error);
+        }
+
+        zoomInBtn.onclick = async () => {
+            if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
+                scale += 0.25;
+                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+                await reRenderPdfAndAnnotations();
+            } else if (currentDocument && currentViewerType === 'image') {
+                scale += 0.25;
+                zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+                const image = document.querySelector('.image-viewer');
+                if (image) image.style.transform = `scale(${scale})`;
+                repositionAnnotationCanvases();
             }
-        });
-
-    audioPlayer.addEventListener('play', () => {
-        playPauseBtn.textContent = '⏸';
-    });
-
-    audioPlayer.addEventListener('pause', () => {
-        playPauseBtn.textContent = '▶';
-    });
-    
-    function formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        if (isNaN(minutes) || isNaN(secs)) {
-            return '?:??';
-        }
-        return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
-    }
-
-    audioPlayer.addEventListener('timeupdate', () => {
-        if (!isNaN(audioPlayer.duration)) {
-            const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-            progressBarFill.style.width = `${progress}%`;
-            timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`;
-        }
-    });
-
-    progressBar.addEventListener('click', (e) => {
-        if (!isNaN(audioPlayer.duration)) {
-            const rect = progressBar.getBoundingClientRect();
-            const clickPosition = e.clientX - rect.left;
-            const newTime = (clickPosition / rect.width) * audioPlayer.duration;
-            audioPlayer.currentTime = newTime;
-        }
-    });
-
-    function setupAnnotationEvents() {
-        annotateBtn.onclick = () => {
-            isAnnotating = !isAnnotating;
-            annotateBtn.classList.toggle('active', isAnnotating);
-            pdfViewerContainer.style.cursor = isAnnotating ? 'crosshair' : 'auto';
         };
 
-        annotationCanvases.forEach(canvas => {
-            canvas.onmousedown = (e) => startDrawing(e, canvas);
-            canvas.onmousemove = (e) => draw(e, canvas);
-            canvas.onmouseup = endDrawing;
-            canvas.onmouseout = endDrawing;
-        });
-    }
+        zoomOutBtn.onclick = async () => {
+            if (scale > 0.25) {
+                if (currentDocument && currentViewerType === 'pdf' && !isRendering) {
+                    scale -= 0.25;
+                    zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+                    await reRenderPdfAndAnnotations();
+                } else if (currentDocument && currentViewerType === 'image') {
+                    scale -= 0.25;
+                    zoomLevelSpan.textContent = `${Math.round(scale * 100)}%`;
+                    const image = document.querySelector('.image-viewer');
+                    if (image) image.style.transform = `scale(${scale})`;
+                    repositionAnnotationCanvases();
+                }
+            }
+        };
 
-    function startDrawing(e, canvas) {
-        if (!isAnnotating) return;
-        isDrawing = true;
-        const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / scale;
-        const y = (e.clientY - rect.top) / scale;
-        currentPath = [{ x, y }];
-        const ctx = canvas.getContext('2d');
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-    }
+        async function reRenderPdfAndAnnotations() {
+            if (isRendering) return;
+            isRendering = true;
+            
+            const oldScale = scale - 0.25;
+            const pageCanvases = pdfViewerContainer.querySelectorAll('.pdf-canvas');
+            const oldScrollTop = pdfViewerContainer.scrollTop;
+            
+            let currentPageIndex = 0;
+            let offsetInPage = 0;
 
-    function draw(e, canvas) {
-        if (!isDrawing || !isAnnotating) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / scale;
-        const y = (e.clientY - rect.top) / scale;
-        currentPath.push({ x, y });
-        const ctx = canvas.getContext('2d');
-        ctx.lineTo(x, y);
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
+            for (let i = 0; i < pageCanvases.length; i++) {
+                const canvas = pageCanvases[i];
+                
+                if (canvas.offsetTop <= oldScrollTop + 1) { 
+                    currentPageIndex = i;
+                    offsetInPage = oldScrollTop - canvas.offsetTop;
+                } else {
+                    break;
+                }
+            }
+            
+            const renderPromises = [];
+            try {
+                for (let i = 0; i < currentDocument.numPages; i++) {
+                    const page = await currentDocument.getPage(i + 1);
+                    const viewport = page.getViewport({ scale });
+                    const canvas = pageCanvases[i];
+                    
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    
+                    const renderContext = { canvasContext: canvas.getContext('2d'), viewport };
+                    renderPromises.push(page.render(renderContext).promise);
+                }
+            } catch (e) {
+                console.error('Error re-rendering PDF page:', e);
+                isRendering = false;
+                return;
+            }
+            await Promise.all(renderPromises);
+            
+            const newCurrentPageCanvas = pageCanvases[currentPageIndex];
+            const newOffsetInPage = offsetInPage * (scale / oldScale);
+            
+            repositionAnnotationCanvases();
+            redrawAllAnnotations();
 
-    function endDrawing() {
-        if (!isDrawing) return;
-        isDrawing = false;
-        if (currentPath.length > 1) {
-            saveAnnotation({
-                type: 'path',
-                points: currentPath,
-                color: 'red',
-                width: 2,
-                scale: 1 
+            Promise.resolve().then(() => {
+                requestAnimationFrame(() => {
+                    pdfViewerContainer.scrollTop = newCurrentPageCanvas.offsetTop + newOffsetInPage;
+                    isRendering = false;
+                });
             });
         }
-        currentPath = [];
-    }
 
-    async function saveAnnotation(annotation) {
-        if (!db || !currentFileId) return;
-        const docRef = doc(db, 'annotations', currentFileId);
-        const docSnap = await getDoc(docRef);
-        
-        let annotations = [];
-        if (docSnap.exists()) {
-            annotations = docSnap.data().annotations || [];
-        }
-        annotations.push(annotation);
-        await setDoc(docRef, { annotations });
-    }
-
-    function subscribeToAnnotations() {
-        if (!db || !currentFileId) return;
-        if (annotationListener) annotationListener(); 
-        
-        const docRef = doc(db, 'annotations', currentFileId);
-        annotationListener = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const { annotations } = docSnap.data();
-                redrawAnnotations(annotations);
-            } else {
-                redrawAnnotations([]);
-            }
-        });
-    }
-
-    function redrawAnnotations(annotations) {
-        if (annotationCanvases.length === 0) return;
-        annotationCanvases.forEach(canvas => {
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        });
-        
-        annotations.forEach(annotation => {
-            const pageIndex = 0; 
-            const canvas = annotationCanvases[pageIndex];
-            if (!canvas) return;
-
-            const ctx = canvas.getContext('2d');
-            ctx.strokeStyle = annotation.color;
-            ctx.lineWidth = annotation.width;
-            ctx.beginPath();
-            
-            if (annotation.type === 'path' && annotation.points.length > 1) {
-                const firstPoint = annotation.points[0];
-                ctx.moveTo(firstPoint.x * scale, firstPoint.y * scale);
-                for (let i = 1; i < annotation.points.length; i++) {
-                    const point = annotation.points[i];
-                    ctx.lineTo(point.x * scale, point.y * scale);
+        function repositionAnnotationCanvases() {
+            if (currentViewerType === 'pdf') {
+                const pdfCanvases = pdfViewerContainer.querySelectorAll('.pdf-canvas');
+                pdfCanvases.forEach((pdfCanvas, index) => {
+                    const annotationCanvas = annotationCanvases[index];
+                    if (annotationCanvas) {
+                        annotationCanvas.width = pdfCanvas.width;
+                        annotationCanvas.height = pdfCanvas.height;
+                        annotationCanvas.style.top = `${pdfCanvas.offsetTop}px`;
+                        annotationCanvas.style.left = `${pdfCanvas.offsetLeft}px`;
+                    }
+                });
+            } else if (currentViewerType === 'image') {
+                const image = document.querySelector('.image-viewer');
+                if (image && annotationCanvases[0]) {
+                    const annotationCanvas = annotationCanvases[0];
+                    const rect = image.getBoundingClientRect();
+                    annotationCanvas.width = image.naturalWidth;
+                    annotationCanvas.height = image.naturalHeight;
+                    annotationCanvas.style.transform = `scale(${scale})`;
+                    annotationCanvas.style.transformOrigin = 'center top';
+                    annotationCanvas.style.top = `${image.offsetTop}px`;
+                    annotationCanvas.style.left = `${image.offsetLeft}px`;
                 }
-                ctx.stroke();
+            }
+        }
+
+        modal.onmousemove = () => {
+            topControls.classList.add('top-controls-visible');
+            bottomRightControls.classList.add('bottom-right-controls-visible');
+            clearTimeout(controlsTimeout);
+            controlsTimeout = setTimeout(() => {
+                topControls.classList.remove('top-controls-visible');
+                bottomRightControls.classList.remove('bottom-right-controls-visible');
+            }, 2000);
+        };
+
+        window.onclick = function(event) {
+            if (event.target === modal) {
+                closePdfModal();
+            }
+        };
+
+        rpsText.onclick = function() {
+            contactLink.classList.toggle('contact-link-hidden');
+        };
+
+        playPauseBtn.addEventListener('click', async () => {
+            if (!audioPlayer.src) return;
+            try {
+                if (audioPlayer.paused) {
+                    await audioPlayer.play();
+                } else {
+                    audioPlayer.pause();
+                }
+            } catch (error) {
+                    console.error('Playback failed. Error:', error);
+                }
+            });
+
+        audioPlayer.addEventListener('play', () => {
+            playPauseBtn.textContent = '⏸';
+        });
+
+        audioPlayer.addEventListener('pause', () => {
+            playPauseBtn.textContent = '▶';
+        });
+        
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            if (isNaN(minutes) || isNaN(secs)) {
+                return '?:??';
+            }
+            return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        audioPlayer.addEventListener('timeupdate', () => {
+            if (!isNaN(audioPlayer.duration)) {
+                const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                progressBarFill.style.width = `${progress}%`;
+                timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`;
             }
         });
-    }
 
-    function redrawAllAnnotations() {
-        if (annotationListener) {
+        progressBar.addEventListener('click', (e) => {
+            if (!isNaN(audioPlayer.duration)) {
+                const rect = progressBar.getBoundingClientRect();
+                const clickPosition = e.clientX - rect.left;
+                const newTime = (clickPosition / rect.width) * audioPlayer.duration;
+                audioPlayer.currentTime = newTime;
+            }
+        });
+
+        function setupAnnotationEvents() {
+            annotateBtn.onclick = () => {
+                isAnnotating = !isAnnotating;
+                annotateBtn.classList.toggle('active', isAnnotating);
+                pdfViewerContainer.style.cursor = isAnnotating ? 'crosshair' : 'auto';
+            };
+
+            annotationCanvases.forEach(canvas => {
+                canvas.onmousedown = (e) => startDrawing(e, canvas);
+                canvas.onmousemove = (e) => draw(e, canvas);
+                canvas.onmouseup = endDrawing;
+                canvas.onmouseout = endDrawing;
+            });
+        }
+
+        function startDrawing(e, canvas) {
+            if (!isAnnotating) return;
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / scale;
+            const y = (e.clientY - rect.top) / scale;
+            currentPath = [{ x, y }];
+            const ctx = canvas.getContext('2d');
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        function draw(e, canvas) {
+            if (!isDrawing || !isAnnotating) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / scale;
+            const y = (e.clientY - rect.top) / scale;
+            currentPath.push({ x, y });
+            const ctx = canvas.getContext('2d');
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function endDrawing() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            if (currentPath.length > 1) {
+                saveAnnotation({
+                    type: 'path',
+                    points: currentPath,
+                    color: 'red',
+                    width: 2,
+                    scale: 1 
+                });
+            }
+            currentPath = [];
+        }
+
+        async function saveAnnotation(annotation) {
+            if (!db || !currentFileId) return;
             const docRef = doc(db, 'annotations', currentFileId);
-            getDoc(docRef).then(docSnap => {
+            const docSnap = await getDoc(docRef);
+            
+            let annotations = [];
+            if (docSnap.exists()) {
+                annotations = docSnap.data().annotations || [];
+            }
+            annotations.push(annotation);
+            await setDoc(docRef, { annotations });
+        }
+
+        function subscribeToAnnotations() {
+            if (!db || !currentFileId) return;
+            if (annotationListener) annotationListener(); 
+            
+            const docRef = doc(db, 'annotations', currentFileId);
+            annotationListener = onSnapshot(docRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    redrawAnnotations(docSnap.data().annotations);
+                    const { annotations } = docSnap.data();
+                    redrawAnnotations(annotations);
                 } else {
                     redrawAnnotations([]);
                 }
             });
         }
-    }
-    
-    if (__firebase_config) {
-        const app = initializeApp(__firebase_config, __app_id);
-        auth = getAuth(app);
-        db = getFirestore(app);
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                userIdDisplay.textContent = `User ID: ${userId.substring(0, 8)}...`;
-            }
-        });
 
-        async function signIn() {
-            try {
-                if (__initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+        function redrawAnnotations(annotations) {
+            if (annotationCanvases.length === 0) return;
+            annotationCanvases.forEach(canvas => {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+            
+            annotations.forEach(annotation => {
+                const pageIndex = 0; 
+                const canvas = annotationCanvases[pageIndex];
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                ctx.strokeStyle = annotation.color;
+                ctx.lineWidth = annotation.width;
+                ctx.beginPath();
+                
+                if (annotation.type === 'path' && annotation.points.length > 1) {
+                    const firstPoint = annotation.points[0];
+                    ctx.moveTo(firstPoint.x * scale, firstPoint.y * scale);
+                    for (let i = 1; i < annotation.points.length; i++) {
+                        const point = annotation.points[i];
+                        ctx.lineTo(point.x * scale, point.y * scale);
+                    }
+                    ctx.stroke();
                 }
-            } catch (error) {
-                console.error("Firebase Auth Error:", error);
+            });
+        }
+
+        function redrawAllAnnotations() {
+            if (annotationListener) {
+                const docRef = doc(db, 'annotations', currentFileId);
+                getDoc(docRef).then(docSnap => {
+                    if (docSnap.exists()) {
+                        redrawAnnotations(docSnap.data().annotations);
+                    } else {
+                        redrawAnnotations([]);
+                    }
+                });
             }
         }
-        signIn();
-    }
-    document.addEventListener('DOMContentLoaded', fetchAndRenderGrid);
-</script>
+        
+        if (__firebase_config) {
+            const app = initializeApp(__firebase_config, __app_id);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userIdDisplay.textContent = `User ID: ${userId.substring(0, 8)}...`;
+                }
+            });
+
+            async function signIn() {
+                try {
+                    if (__initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Firebase Auth Error:", error);
+                }
+            }
+            signIn();
+        }
+        document.addEventListener('DOMContentLoaded', fetchAndRenderGrid);
+    </script>
 
 </body>
 </html>
