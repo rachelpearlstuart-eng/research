@@ -739,6 +739,7 @@
                 annotationCanvas.width = image.naturalWidth;
                 annotationCanvas.height = image.naturalHeight;
                 annotationCanvas.style.transform = `scale(${scale})`;
+                annotationCanvas.style.transformOrigin = 'center top';
                 annotationCanvas.style.top = `${image.offsetTop}px`;
                 annotationCanvas.style.left = `${image.offsetLeft}px`;
             }
@@ -935,15 +936,6 @@
                 }
             });
         }
-    }
-
-    function formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        if (isNaN(minutes) || isNaN(secs)) {
-            return '?:??';
-        }
-        return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
     if (__firebase_config) {
