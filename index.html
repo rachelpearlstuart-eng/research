@@ -281,6 +281,48 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
+</head>
+<body>
+
+    <div id="grid-container" class="grid-container"></div>
+
+    <div id="pdfModal" class="modal">
+        <div class="modal-content" id="pdfViewerContainer">
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <div id="topControls" class="top-controls">
+        <button class="close-button" onclick="closePdfModal()">
+            <span class="close">&times;</span>
+        </button>
+        <div class="zoom-controls">
+            <button id="zoomOutBtn" class="zoom-button">-</button>
+            <span id="zoomLevel">100%</span>
+            <button id="zoomInBtn" class="zoom-button">+</button>
+        </div>
+    </div>
+
+    <div id="bottomRightControls" class="bottom-right-controls">
+        <div id="audio-player-container" class="audio-player-container">
+            <audio id="audio-player"></audio>
+            <div class="audio-controls">
+                <button id="play-pause-btn" class="play-pause-btn">▶</button>
+                <div id="progress-bar" class="progress-bar">
+                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                </div>
+                <div id="time-display" class="time-display">0:00 / 0:00</div>
+            </div>
+        </div>
+        <button id="annotateBtn" class="control-button">Annotate</button>
+        <div id="userIdDisplay"></div>
+    </div>
+
+    <div class="footer-bar">
+        <span class="rps-text">@rachelpearlstuart</span>
+        <a href="mailto:rachel@rachelpearlstuart.com" class="contact-link-hidden contact-link">Contact</a>
+    </div>
+
     <script type="module">
         const __app_id = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
         const __firebase_config = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : null;
@@ -903,6 +945,5 @@
         }
         document.addEventListener('DOMContentLoaded', fetchAndRenderGrid);
     </script>
-
 </body>
 </html>
