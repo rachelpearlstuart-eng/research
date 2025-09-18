@@ -286,7 +286,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { externalAudioMap } from './audio_config.js'; // Import the new file
+        import { externalAudioMap } from './audio_config.js';
 
         window.firebase = {
             initializeApp,
@@ -489,8 +489,8 @@
                              displayItems.push({
                                 id: pngNameBase,
                                 name: png.name,
-                                type: 'pdf', // Changed to PDF to use the viewer
-                                url: universalPdfUrl, // Use the universal fallback PDF
+                                type: 'pdf',
+                                url: universalPdfUrl,
                                 scale: 2.0,
                                 thumbnailUrl: png.download_url,
                                 audioUrl: audioUrl
