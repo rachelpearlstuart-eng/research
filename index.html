@@ -364,7 +364,7 @@
     
     const {
         initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
-        getFirestore, doc, setDoc, onSnapshot, setLogLevel
+        getFirestore, doc, getDoc, setDoc, onSnapshot, setLogLevel
     } = window.firebase;
     
     let db;
@@ -418,6 +418,10 @@
     const scaleMap = {
         'four': 4.0, 'five': 5.0, 'six': 6.0, 'seven': 7.0, 'eight': 8.0
     };
+    const externalAudioMap = {
+        'Hejinian_Lyn_naropa_95': 'https://server16621.contentdm.oclc.org/dmwebservices/index.php?q=dmGetStreamingFile/p16621coll1/1632.mp3/byte/json',
+        // Add other mappings here as needed
+    };
 
     function resetAudioPlayer() {
         audioPlayer.pause();
@@ -460,14 +464,14 @@
                 pngs.forEach(png => {
                     const pngNameBase = png.name.replace('.png', '');
                     const pdf = pdfsMap.get(pngNameBase);
-                    let audio = audioMap.get(pngNameBase);
+                    const repoAudio = audioMap.get(pngNameBase);
+                    const externalAudio = externalAudioMap[pngNameBase];
 
-                    if (!audio) {
-                        const numMatch = pngNameBase.match(/^\d+/);
-                        if (numMatch) {
-                            const numPrefix = numMatch[0];
-                            audio = audioFiles.find(a => a.name.startsWith(numPrefix));
-                        }
+                    let audioUrl = null;
+                    if (repoAudio) {
+                         audioUrl = repoAudio.download_url;
+                    } else if (externalAudio) {
+                         audioUrl = externalAudio;
                     }
 
                     if (pdf) {
@@ -488,9 +492,9 @@
                             url: pdf.download_url,
                             scale: customScale,
                             thumbnailUrl: png.download_url,
-                            audioUrl: audio ? audio.download_url : null
+                            audioUrl: audioUrl
                         });
-                    } else if (audio) {
+                    } else if (audioUrl) {
                          displayItems.push({
                             id: png.name.replace('.png', ''),
                             name: png.name,
@@ -498,7 +502,7 @@
                             url: png.download_url,
                             scale: 2.0,
                             thumbnailUrl: png.download_url,
-                            audioUrl: audio.download_url
+                            audioUrl: audioUrl
                         });
                     }
                 });
@@ -515,7 +519,7 @@
                 });
 
                 if (displayItems.length === 0) {
-                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PDF or audio file has a matching PNG thumbnail.</p>';
+                    gridContainer.innerHTML = '<p>No displayable files found. Please ensure each PNG thumbnail has a corresponding PDF or audio file.</p>';
                     return;
                 }
                 
@@ -588,6 +592,7 @@
             annotationCanvas.style.transform = `scale(${scale})`;
             annotationCanvas.style.transformOrigin = 'center top';
             annotationCanvas.style.top = `${image.offsetTop}px`;
+            annotationCanvas.style.left = `${image.offsetLeft}px`;
         };
         container.appendChild(annotationCanvas);
         annotationCanvases.push(annotationCanvas);
@@ -843,7 +848,7 @@
         currentPath = [{ x, y }];
         const ctx = canvas.getContext('2d');
         ctx.beginPath();
-        ctx.moveTo(e.offsetX, e.offsetY);
+        ctx.moveTo(x, y);
     }
 
     function draw(e, canvas) {
@@ -853,7 +858,7 @@
         const y = (e.clientY - rect.top) / scale;
         currentPath.push({ x, y });
         const ctx = canvas.getContext('2d');
-        ctx.lineTo(e.offsetX, e.offsetY);
+        ctx.lineTo(x, y);
         ctx.strokeStyle = 'red';
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -868,7 +873,7 @@
                 points: currentPath,
                 color: 'red',
                 width: 2,
-                scale: scale
+                scale: 1 // Store at base scale
             });
         }
         currentPath = [];
