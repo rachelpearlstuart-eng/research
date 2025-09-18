@@ -465,8 +465,11 @@
                     }
 
                     if (audioUrl) {
+                        let pdfUrlToUse = null;
+                        let customScale = 2.0;
+
                         if (pdf) {
-                            let customScale = 4.0;
+                            pdfUrlToUse = pdf.download_url;
                             const numericMatch = pdf.name.match(/_(\d+)\.pdf$/);
                             if (numericMatch) {
                                 customScale = parseInt(numericMatch[1]) / 100;
@@ -476,26 +479,19 @@
                                     customScale = scaleMap[wordMatch[1]];
                                 }
                             }
-                            displayItems.push({
-                                id: pdf.name.replace('.pdf', ''),
-                                name: png.name,
-                                type: 'pdf',
-                                url: pdf.download_url,
-                                scale: customScale,
-                                thumbnailUrl: png.download_url,
-                                audioUrl: audioUrl
-                            });
                         } else {
-                             displayItems.push({
-                                id: pngNameBase,
-                                name: png.name,
-                                type: 'pdf',
-                                url: universalPdfUrl,
-                                scale: 2.0,
-                                thumbnailUrl: png.download_url,
-                                audioUrl: audioUrl
-                            });
+                            pdfUrlToUse = universalPdfUrl;
                         }
+
+                        displayItems.push({
+                            id: pngNameBase,
+                            name: png.name,
+                            type: 'pdf',
+                            url: pdfUrlToUse,
+                            scale: customScale,
+                            thumbnailUrl: png.download_url,
+                            audioUrl: audioUrl
+                        });
                     }
                 });
 
