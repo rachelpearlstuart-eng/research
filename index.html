@@ -527,15 +527,16 @@
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     container.appendChild(canvas);
-                    const renderContext = { canvasContext, viewport };
-                    await page.render(renderContext).promise;
                     const annotationCanvas = document.createElement('canvas');
                     annotationCanvas.className = 'annotation-canvas';
                     annotationCanvas.width = viewport.width;
                     annotationCanvas.height = viewport.height;
-                    annotationCanvas.style.top = `${canvas.offsetTop}px`;
                     container.appendChild(annotationCanvas);
                     annotationCanvases.push(annotationCanvas);
+                    const renderContext = { canvasContext, viewport };
+                    await page.render(renderContext).promise;
+                    annotationCanvas.style.top = `${canvas.offsetTop}px`;
+                    annotationCanvas.style.left = `${canvas.offsetLeft}px`;
                 }
             } catch (e) {
                 console.error('Error rendering PDF page:', e);
