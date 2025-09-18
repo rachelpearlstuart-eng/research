@@ -1,8 +1,3 @@
-The blank page error has been fixed. Here is the complete and correct `index.html` file that will load your repository content properly. I have corrected the underlying code logic that was causing the page to fail.
-
------
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,7 +6,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
     <title>Research Collection</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>
-        /* Base Styles */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -103,8 +97,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         .bottom-right-controls-visible {
             opacity: 1;
         }
-
-        /* PDF Viewer Modal */
         .modal {
             display: none;
             position: fixed;
@@ -144,8 +136,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
             top: 0;
             left: 0;
         }
-        
-        /* Top Controls (x, Zoom) */
         .top-controls {
             position: fixed;
             top: 20px;
@@ -223,8 +213,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         .zoom-button:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
-
-        /* Audio Player */
         .audio-player-container {
             display: none;
             width: 170px;
@@ -276,8 +264,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
             font-size: 12px;
             color: #ccc;
         }
-
-        /* Custom Scrollbar */
         .modal-content::-webkit-scrollbar {
             width: 8px;
         }
@@ -295,7 +281,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
-    
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -408,7 +393,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
     let isRendering = false;
     let isAnnotating = false;
     
-    // Annotation variables
     let annotationCanvases = [];
     let isDrawing = false;
     let currentPath = [];
@@ -425,7 +409,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
     };
     const externalAudioMap = {
         'Hejinian_Lyn_naropa_95': 'https://server16621.contentdm.oclc.org/dmwebservices/index.php?q=dmGetStreamingFile/p16621coll1/1632.mp3/byte/json',
-        // Add other mappings here as needed
     };
 
     function resetAudioPlayer() {
@@ -565,8 +548,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
                 container.appendChild(canvas);
                 const renderContext = { canvasContext, viewport };
                 await page.render(renderContext).promise;
-
-                // Add annotation canvas on top
                 const annotationCanvas = document.createElement('canvas');
                 annotationCanvas.className = 'annotation-canvas';
                 annotationCanvas.width = viewport.width;
@@ -592,8 +573,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         image.style.transform = `scale(${scale})`;
         image.style.transformOrigin = 'center top';
         container.appendChild(image);
-
-        // Add annotation canvas for the image
         const annotationCanvas = document.createElement('canvas');
         annotationCanvas.className = 'annotation-canvas';
         image.onload = () => {
@@ -649,7 +628,7 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         currentViewerType = null;
         resetAudioPlayer();
         if (annotationListener) {
-            annotationListener(); // Unsubscribe from Firestore
+            annotationListener();
             annotationListener = null;
         }
     }
@@ -833,7 +812,6 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         }
     });
 
-    // Annotation Logic
     function setupAnnotationEvents() {
         annotateBtn.onclick = () => {
             isAnnotating = !isAnnotating;
@@ -883,7 +861,7 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
                 points: currentPath,
                 color: 'red',
                 width: 2,
-                scale: 1 // Store at base scale
+                scale: 1 
             });
         }
         currentPath = [];
@@ -904,7 +882,7 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
 
     function subscribeToAnnotations() {
         if (!db || !currentFileId) return;
-        if (annotationListener) annotationListener(); // Unsubscribe from previous
+        if (annotationListener) annotationListener(); 
         
         const docRef = doc(db, 'annotations', currentFileId);
         annotationListener = onSnapshot(docRef, (docSnap) => {
@@ -925,7 +903,7 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         });
         
         annotations.forEach(annotation => {
-            const pageIndex = 0; // Assuming single page for now
+            const pageIndex = 0; 
             const canvas = annotationCanvases[pageIndex];
             if (!canvas) return;
 
@@ -968,13 +946,10 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
-    // Firebase Initialization
     if (__firebase_config) {
         const app = initializeApp(__firebase_config, __app_id);
         auth = getAuth(app);
         db = getFirestore(app);
-        // setLogLevel('debug'); // Uncomment for Firestore debugging
-
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 userId = user.uid;
@@ -1000,4 +975,3 @@ The blank page error has been fixed. Here is the complete and correct `index.htm
 
 </body>
 </html>
-```
